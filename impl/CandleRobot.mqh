@@ -67,14 +67,21 @@ struct BordersOperation {
    double min;
 };
 
+struct SelectedPrices {
+   MqlRates last;
+   MqlRates secondLast;
+};
+
+
+input POWER TESTING_DAY = ON;
 input POWER AGAINST_CURRENT = ON;
 input POWER BASED_ON_FINANCIAL_PROFIT_AND_LOSS = ON;
 input int PONTUATION_ESTIMATE = 100;
-input double PROFIT_MAX_PER_DAY = 300;
-input double LOSS_MAX_PER_DAY = 50;
-input double TAKE_PROFIT = 110;
-input double STOP_LOSS = 40;
-input double ACTIVE_VOLUME = 1;
+input double PROFIT_MAX_PER_DAY = 300.0;
+input double LOSS_MAX_PER_DAY = 50.0;
+input int TAKE_PROFIT = 110;
+input int STOP_LOSS = 40;
+input double ACTIVE_VOLUME = 1.0;
 input int BARS_NUM = 4;
 input int HEGHT_BUTTON_PANIC = 350;
 input int WIDTH_BUTTON_PANIC = 500;
@@ -89,13 +96,14 @@ double takeProfit = (TAKE_PROFIT);
 double stopLoss = (STOP_LOSS);
 
 int contador = 0;
-MqlRates lastPriceSelected;
+int countDays = 0;
 bool advanceDeal = false;
 datetime avaliationTime;
 bool periodAchieved = false;
 InfoDeal infoDeal;
 bool activeDeal = false;
 bool startedAvaliationTime = false;
+SelectedPrices selectedPrices;
 datetime dateClosedDeal;
 bool closedDeals = false;
 bool isPossivelToSell = false;
@@ -105,14 +113,16 @@ bool waitNewPeriod = false;
 double profits = 0;
 double losses = 0;
 
+int printTimeProtect = true;
+int printEndTimeDeal = true;
 ResultOperation resultDeals;
 
 void startRobots(){
   printf("Start Robots in " +  _Symbol);
   //CopyRates(_Symbol,_Period,0,maxPositionsArray,candles);
   //ArraySetAsSeries(candles, true);
-  createButton("BotaoPanic", WIDTH_BUTTON_PANIC, HEGHT_BUTTON_PANIC, 200, 30, CORNER_LEFT_LOWER, 12, "Calibri", "Fechar Negociacoes", clrWhite, clrRed, clrRed, false);
   Print("Negociações Abertas para o dia: ", TimeToString(TimeCurrent(), TIME_DATE));
+  createButton("BotaoPanic", WIDTH_BUTTON_PANIC, HEGHT_BUTTON_PANIC, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Fechar Negociacoes", clrWhite, clrRed, clrRed, false);
 }
 
 void finishRobots(){
@@ -126,25 +136,22 @@ void closeBuyOrSell(){
 }
 
 void decideToBuyOrSell(ORIENTATION orient){
-   TYPE_NEGOCIATION typeDeal;
+   TYPE_NEGOCIATION typeDeal = NONE;
    //Verifica se a orientação está subindo ou descendo
    if(orient == UP){
-      typeDeal = SELL;
-   }else if(orient == DOWN){
       typeDeal = BUY;
-   }else{
-      typeDeal = NONE;
+   }else if(orient == DOWN){
+      typeDeal = SELL;
    }
    
    /**/
-   
    if(AGAINST_CURRENT == ON){
       if(typeDeal == BUY){
          typeDeal = SELL;            
       }
       else if(typeDeal == SELL){
          typeDeal = BUY;
-      }
+      }   
    }
    
    realizeDeals(typeDeal);
@@ -217,17 +224,21 @@ ORIENTATION verifyOrientation(){
             //int pontuationEstimate = 0;
             if(up > medium){ 
                //pontuationEstimate = (lastCandle.high - candles[0].low) / _Point;
+               selectedPrices.last.close = 0;
                if(pontuationEstimate >= PONTUATION_ESTIMATE ){
                   drawVerticalLine(actualTime, "up" + IntegerToString(numBars), clrYellow);
-                  lastPriceSelected = lastCandle;
+                  selectedPrices.last = lastCandle;
+                  selectedPrices.secondLast = candles[barsPrevActualCandle-1];
                   waitNewPeriod = true;
                   return UP;
               }
             }else if(down > medium){
               // pontuationEstimate = (candles[0].high - lastCandle.low) / _Point;
+               selectedPrices.last.close = 0;
                if(pontuationEstimate >= PONTUATION_ESTIMATE){
                   drawVerticalLine(actualTime, "down" + IntegerToString(numBars), clrBlue);
-                  lastPriceSelected = lastCandle;
+                  selectedPrices.last = lastCandle;
+                  selectedPrices.secondLast = candles[barsPrevActualCandle-1];
                   waitNewPeriod = true;
                   return DOWN;
                }
@@ -239,39 +250,60 @@ ORIENTATION verifyOrientation(){
       else{
          contador++;
          if(contador >= BARS_NUM){
-            //closeBuyOrSell();
-            waitNewPeriod = false;
-            contador = 0;
+            closeBuyOrSell();
+            resetPeriodToEntry();
          }else{
-             /**/
-            // verifica se existe posicao aberta e qual tipo de tipo de posicao esta ativo
-            if(lastPriceSelected.close > 0 ){  //&& PositionSelect(_Symbol) == true
-                   MqlRates precos[1];
-                  int copiedPrice = CopyRates(_Symbol,_Period,0,1,precos);
-                  if(copiedPrice == 1){
-                     if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY){
-                        if(lastPriceSelected.high < precos[0].close){
-                           closeBuyOrSell();
-                           waitNewPeriod = false;
-                           contador = 0;
-                           //return UP;
-                        }
-                     }else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL){
-                        if(lastPriceSelected.close > precos[0].close){
-                           closeBuyOrSell();
-                           waitNewPeriod = false;
-                           contador = 0;
-                           //return DOWN;
-                        }
-                     }
-                  }
-              //}
-            }
+            closeRiskDeals();
          }
+      }
+   }else{
+      if(waitNewPeriod == true) {
+        // closeRiskDeals();
       }
    }
    
    return MEDIUM;
+}
+
+ORIENTATION closeRiskDeals(){
+    /**/
+   // verifica se existe posicao aberta e qual tipo de tipo de posicao esta ativo
+   if(selectedPrices.last.close > 0 ){  //&& PositionSelect(_Symbol) == true
+      MqlRates precos[1];
+      int copiedPrice = CopyRates(_Symbol,_Period,0,1,precos);
+      if(copiedPrice == 1){
+         bool up = false;
+         if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY){
+            //Sinal Subindo
+            if((selectedPrices.secondLast.low < selectedPrices.last.low) && 
+               (selectedPrices.last.low < precos[0].low || selectedPrices.last.low < precos[0].open)){
+                  Print("O preço está subindo. Continuando a compra.");
+            }else{
+               Print("Sem a certeza de que o preço está subindo. Encerrando a compra.");
+               closeBuyOrSell();
+               resetPeriodToEntry();
+               return DOWN;
+            }
+         }else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL){
+            //Sinal descendo
+            if((selectedPrices.secondLast.high > selectedPrices.last.high) && 
+               (selectedPrices.last.high > precos[0].high || selectedPrices.last.high > precos[0].open)){
+                  Print("O preço está descendo. Continuando a venda.");
+            }else{
+               Print("Sem a certeza de que o preço está descendo. Encerrando a venda.");
+               closeBuyOrSell();
+               resetPeriodToEntry();
+               return UP;
+            }
+         }
+      }
+   }
+   return MEDIUM;
+}
+
+void resetPeriodToEntry(){
+   waitNewPeriod = false;
+   contador = 0;
 }
 
 void toBuy(){
@@ -357,7 +389,8 @@ void getHistory(){
    
    HistorySelect(0, TimeCurrent());
    ulong trades = HistoryDealsTotal();
-   Print("Total de negociações: ", trades);
+   //Print("Total de negociações: ", trades);
+   //Print("Lucro Atual: R$ ", resultOperation.liquidResult);
    
    for(uint i = 1; i <= trades; i++)  {
       ulong ticket = HistoryDealGetTicket(i);
@@ -370,17 +403,17 @@ void getHistory(){
       resultOperation.profitFactor += resultOp.profitFactor;  
    }
    
-   Print("Lucro Atual: R$ ", resultOperation.liquidResult);
-   if(resultOperation.liquidResult >= PROFIT_MAX_PER_DAY || resultOperation.liquidResult <= -LOSS_MAX_PER_DAY ) {
-     Print("Limite atingido por dia -> R$ ", resultOperation.liquidResult);
-     toCloseDeals();
-   }     
-       
    Comment("Trades: " + IntegerToString(trades), 
    " Profits: " + DoubleToString(resultOperation.profits, 2), 
    " Losses: " + DoubleToString(resultOperation.losses, 2), 
    " Profit Factor: " + DoubleToString(resultOperation.profitFactor, 2), 
-   " Liquid Result: " + DoubleToString(resultOperation.liquidResult, 2));
+   " Liquid Result: " + DoubleToString(resultOperation.liquidResult, 2), 
+   " Number of days: " + IntegerToString(countDays, 2));
+   
+   resultDeals.losses = resultOperation.losses;
+   resultDeals.profits = resultOperation.profits;
+   resultDeals.profitFactor = resultOperation.profitFactor;
+   resultDeals.liquidResult = resultOperation.liquidResult;
 }
 
 bool verifyResultTrade(){
@@ -426,9 +459,15 @@ void toCloseDeals(){
 
 void startDeals(){
    if(timeToProtection(START_PROTECTION_TIME, MAJOR) && timeToProtection(END_PROTECTION_TIME, MINOR)){
-      //printf("Horario de proteção ativo");
+      if(printTimeProtect == true){
+         Print("Horario de proteção ativo");
+         printTimeProtect = false;
+      }
    }else if(timeToProtection(NEGOCIATIONS_LIMIT_TIME, MAJOR) ){
-      Print("Fim do tempo operacional. Encerrando Negociações");
+      if(printEndTimeDeal == true){
+         Print("Fim do tempo operacional. Encerrando Negociações");
+         printEndTimeDeal = false;
+      }
       toCloseDeals();
    }else{
       ORIENTATION orient = verifyOrientation();
@@ -437,23 +476,20 @@ void startDeals(){
 }
 
 void drawHorizontalLine(double price, string nameLine, color indColor){
-   long charId = StringToInteger(_Symbol);
-   ObjectCreate(charId,nameLine,OBJ_HLINE,0,0,price);
+   ObjectCreate(_Symbol,nameLine,OBJ_HLINE,0,0,price);
    ObjectSetInteger(0,nameLine,OBJPROP_COLOR,indColor);
    ObjectSetInteger(0,nameLine,OBJPROP_WIDTH,1);
-   ObjectMove(charId,nameLine,0,0,price);
+   ObjectMove(_Symbol,nameLine,0,0,price);
 }
 
 void drawVerticalLine(datetime time, string nameLine, color indColor){
-   long charId = StringToInteger(_Symbol);
-   ObjectCreate(charId,nameLine,OBJ_VLINE,0,time,0);
+   ObjectCreate(_Symbol,nameLine,OBJ_VLINE,0,time,0);
    ObjectSetInteger(0,nameLine,OBJPROP_COLOR,indColor);
    ObjectSetInteger(0,nameLine,OBJPROP_WIDTH,1);
 }
 
 void createButton(string nameLine, int xx, int yy, int largura, int altura, int canto, int tamanho, string fonte, string text, long corTexto, long corFundo, long corBorda, bool oculto){
-   long charId = StringToInteger(_Symbol);
-   ObjectCreate(charId,nameLine,OBJ_BUTTON,0,0,0);
+   ObjectCreate(_Symbol,nameLine,OBJ_BUTTON,0,0,0);
    ObjectSetInteger(0,nameLine,OBJPROP_XDISTANCE,xx);
    ObjectSetInteger(0,nameLine,OBJPROP_YDISTANCE, yy);
    ObjectSetInteger(0,nameLine,OBJPROP_XSIZE, largura);
