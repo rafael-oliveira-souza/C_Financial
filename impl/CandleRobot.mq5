@@ -8,7 +8,7 @@
 #property version   "1.00"
 
 //+------------------------------------------------------------------+
-#include "robot1.mqh"
+#include "CandleRobot.mqh"
 
 int printClosedNeg = false;
 
@@ -46,6 +46,17 @@ void OnTick(){
          startDeals();
          Print("Negociações Encerradas para o dia: ", TimeToString(dateClosedDeal, TIME_DATE));
          printClosedNeg = true;
+         printTimeProtect = true;
+         printEndTimeDeal = true;
+         countDays++;
+         
+         Print("Ganho do dia -> R$", resultDeals.liquidResult);
+         if(TESTING_DAY == ON){
+            if(resultDeals.liquidResult >= PROFIT_MAX_PER_DAY || resultDeals.liquidResult <= -LOSS_MAX_PER_DAY ) {
+              Print("Limite atingido por dia -> R$ ", resultDeals.liquidResult);
+              toCloseDeals();
+            } 
+         }    
       }
          
       datetime actualTime = TimeCurrent();
