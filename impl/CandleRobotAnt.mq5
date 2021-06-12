@@ -8,7 +8,9 @@
 #property version   "1.00"
 
 //+------------------------------------------------------------------+
-#include "CandleRobot.mqh"
+#include "robot1.mqh"
+
+int printClosedNeg = false;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -37,11 +39,23 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick(){
 //---
-   if(BARS_NUM < 3){
-      Alert("O numero de barras analisadas deve ser maior que 3");
+   if(!closedDeals){
+      startDeals();
    }else{
-      if(closedDeals == false){
+      if(!printClosedNeg){
          startDeals();
+         Print("Negociações Encerradas para o dia: ", TimeToString(dateClosedDeal, TIME_DATE));
+         printClosedNeg = true;
+      }
+         
+      datetime actualTime = TimeCurrent();
+      MqlDateTime structDate, structActual;
+      TimeToStruct(actualTime, structActual);
+      TimeToStruct(dateClosedDeal, structDate);
+      if(structDate.day_of_year != structActual.day_of_year){
+         printClosedNeg = false;
+         closedDeals = false;
+         Print("Negociações Abertas para o dia: ", TimeToString(actualTime, TIME_DATE));
       }
    }
    
