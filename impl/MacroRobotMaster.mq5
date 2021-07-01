@@ -65,7 +65,7 @@ void OnTick(){
             }else{
                if(waitNewCandleMacro <= 0){
                   if(hasPositionOpen()){
-                     valueDealEntryPriceMacro = activeStopMovelPerPoints(channelSize, valueDealEntryPriceMacro);
+                     valueDealEntryPriceMacro = activeStopMovelPerPoints(2*channelSize, valueDealEntryPriceMacro);
                      //valueDealEntryPriceMacro = activeStopMovel(valueDealEntryPriceMacro, candles[1]);
                   }else{
                      if(!crossOverBorderMacro){
