@@ -57,20 +57,23 @@ void OnDeinit(const int reason)
 void OnTick(){
    
   if(verifyTimeToProtection()){
-      int copiedPrice = CopyRates(_Symbol,_Period,0,2,candles);
-      if(copiedPrice == 2){
-         if(isPossibleStartDeals(candles[1].close)){
-            if(hasNewCandle()){
+      int copiedPrice = CopyRates(_Symbol,_Period,0,4,candles);
+      if(copiedPrice == 4){
+         if(hasNewCandle()){
+            if(isPossibleStartDeals(candles[3].close)){
                waitNewCandleMacro--;
-            }else{
+               activeStopMovelPerPointsMacroRobot(candles[0], candles[1], candles[2]);
+            }
+         }else{
+            if(isPossibleStartDeals(candles[3].close)){
                if(waitNewCandleMacro <= 0){
                   if(hasPositionOpen() == false){
                      if(!crossOverBorderMacro){
-                        orientationMacroRobot = recoverOrientation(candles[1].close);
-                        decideToBuyOrSellMacroRobot(orientationMacroRobot, candles[1].close);
+                        orientationMacroRobot = recoverOrientation(candles[3].close);
+                        decideToBuyOrSellMacroRobot(orientationMacroRobot, candles[3].close);
                      }
                   }else{
-                     activeStopMovelPerPointsMacroRobot(candles[1]);
+                     //valueDealEntryPriceMacro = activeStopMovelPerPoints(channelSize, candles[1]);
                   }
                }
             }
@@ -89,12 +92,18 @@ void decideToBuyOrSellMacroRobot(ORIENTATION orient, double closePrice){
          if(orient == UP){
             neededPoints = (initPointMacro + (channelSize * _Point));
             if( closePrice > neededPoints){
-               toBuyOrToSellMediaRobot(orient, calcPoints(initPointMacro, endPointMacro), TAKE_PROFIT);
+               double points = calcPoints(endPointMacro, closePrice);
+               //neededPoints = (initPointMacro + (neededPoints * _Point));
+               crossOverBorderMacro = true;
+               toBuyOrToSellMediaRobot(orient, points, TAKE_PROFIT);
             }
          }else if(orient == DOWN){
             neededPoints = (endPointMacro - (channelSize * _Point));
             if( closePrice < neededPoints){
-               toBuyOrToSellMediaRobot(orient, calcPoints(initPointMacro, endPointMacro), TAKE_PROFIT);
+               double points = calcPoints(initPointMacro, closePrice);
+               //neededPoints = (endPointMacro + (neededPoints * _Point));
+               crossOverBorderMacro = true;
+               toBuyOrToSellMediaRobot(orient, points, TAKE_PROFIT);
             }
          }
       }
@@ -110,6 +119,7 @@ bool isPossibleStartDeals(double closePrice){
       crossOverBorderMacro = false;
       initPointMacro = 0;
       endPointMacro = 0;
+      closeBuyOrSell(0);
    }
    
    if(initPointMacro == 0 || endPointMacro == 0){
@@ -122,8 +132,8 @@ bool isPossibleStartDeals(double closePrice){
          drawHorizontalLine(endPointMacro, TimeCurrent(), "support border", clrYellow);
          drawHorizontalLine(initPointMacro, TimeCurrent(), "resistance border", clrYellow);
          
-         double midPoints = calcPoints(initPointMacro, endPointMacro) / 2;
-         if(midPoints < PONTUATION_ESTIMATE){
+         double midPoints = calcPoints(initPointMacro, endPointMacro) * 0.25;
+         if(midPoints > PONTUATION_ESTIMATE){
             channelSize = midPoints;
          }
       }else{
@@ -133,11 +143,6 @@ bool isPossibleStartDeals(double closePrice){
             bordersSupportAndResistanceMacro.min = closePrice;
          }
       }
-      /*double points = calcPoints(closePrice, initPointMacro);
-      if(points > PONTUATION_ESTIMATE){
-         endPointMacro = closePrice;
-         drawHorizontalLine(endPointMacro, TimeCurrent(), "support border", clrRed);
-      }*/
    }
    
    return (initPointMacro != 0 && endPointMacro != 0);
@@ -147,7 +152,7 @@ void toBuyOrToSellMediaRobot(ORIENTATION orient, double stopLoss, double takePro
   toBuyOrToSell(orient,ACTIVE_VOLUME,stopLoss,takeProfit);
   if(verifyResultTrade()){
      valueDealEntryPriceMacro = 0;
-     waitNewCandleMacro = 0;
+     waitNewCandleMacro = 1;
   }
 }
 
@@ -161,35 +166,41 @@ ORIENTATION recoverOrientation(double closePrice){
    return MEDIUM;
 }
 
-void  activeStopMovelPerPointsMacroRobot(MqlRates& candle){
-   double newSlPrice = 0;
-   double points = 0;
-   if(hasPositionOpen()){ 
+void  activeStopMovelPerPointsMacroRobot(MqlRates& candleSecondLast, MqlRates& candleLast, MqlRates& actualCandle){
+  if(hasPositionOpen()){ 
       double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double bodyLast = calcPoints(candleLast.close, candleLast.open);
+      double bodySecLast = calcPoints(candleSecondLast.close, candleSecondLast.open);
+      double shadowH, shadowL, points;
       
-      if(valueDealEntryPriceMacro <= 0 ){
-         valueDealEntryPriceMacro = entryPrice;
-      }
       if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
-         if(candle.close > valueDealEntryPriceMacro ){
-            valueDealEntryPriceMacro = candle.close;
-            initPointMacro = candle.close;
-         }else{
-            points = calcPoints(valueDealEntryPriceMacro, candle.close);
-            if(points > channelSize && verifyIfOpenBiggerThanClose(candle)){
+         if(verifyIfOpenBiggerThanClose(candleLast)){
+            shadowH = calcPoints(candleLast.high, candleLast.open);
+            shadowL = calcPoints(candleLast.low, candleLast.close);
+            points = calcPoints(initPointMacro, actualCandle.close);
+            // martelo
+            bool isHammer = (shadowH > shadowL + bodyLast);
+            if((bodyLast > bodySecLast || isHammer) && actualCandle.close < candleLast.open){
                closeBuyOrSell(0);
                crossOverBorderMacro = true;
+               if(verifyResultTrade()){
+                  toBuyOrToSellMediaRobot(DOWN, channelSize, points);
+              }
             }
          }
       }else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
-         if(candle.close < valueDealEntryPriceMacro ){
-            valueDealEntryPriceMacro = candle.close;
-            endPointMacro = candle.close;
-         }else{
-            points = calcPoints(valueDealEntryPriceMacro, candle.close);
-            if(points > channelSize && !verifyIfOpenBiggerThanClose(candle)){
+         if(!verifyIfOpenBiggerThanClose(candleLast)){
+            shadowH = calcPoints(candleLast.close, candleLast.high);
+            shadowL = calcPoints(candleLast.low, candleLast.open);
+            points = calcPoints(endPointMacro, actualCandle.close);
+            // martelo
+            bool isHammer = (shadowL > shadowH + bodyLast);
+            if((bodyLast > bodySecLast || isHammer) && actualCandle.close > candleLast.open){
                closeBuyOrSell(0);
                crossOverBorderMacro = true;
+               if(verifyResultTrade()){
+                   toBuyOrToSellMediaRobot(UP, channelSize, points);
+               }
             }
          }
       }
