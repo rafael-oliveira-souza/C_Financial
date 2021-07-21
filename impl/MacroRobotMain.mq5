@@ -5,7 +5,6 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2021, MetaQuotes Ltd."
 #property link      "https://www.mql5.com"
-#property indicator_color1  Yellow
 #property version   "1.00"
 
 input string TIME_TO_START_AVALIATION = "10:30";
@@ -17,9 +16,6 @@ input string TIME_TO_START_AVALIATION = "10:30";
 double channelSize = PONTUATION_ESTIMATE;
 double initPointMacro = 0;
 double endPointMacro = 0;
-
-double averageML[], averageMH[], averageMD[];
-int handleMh, handleMl, handleMd;
 
 BordersOperation bordersSupportAndResistanceMacro;
 ORIENTATION orientationMacroRobot = MEDIUM;
@@ -41,11 +37,6 @@ int OnInit()
      drawVerticalLine(startedDatetimeMacroRobot, "start day", clrRed);
      bordersSupportAndResistanceMacro.max = 0;
      bordersSupportAndResistanceMacro.min = 1000;
-     //handleMh = iCustom(_Symbol, PERIOD_CURRENT,"Custom Moving Average",1, 0,MODE_SMA, PRICE_CLOSE);
-    // handleMh = iMA(_Symbol,PERIOD_CURRENT,1,0,MODE_SMA,PRICE_CLOSE);
-     handleMl = iMA(_Symbol,PERIOD_CURRENT,5,0,MODE_SMA,PRICE_CLOSE);
-     handleMd = iMA(_Symbol,PERIOD_CURRENT,15,0,MODE_SMA,PRICE_CLOSE);
-     //handleMl = iMA(_Symbol,PERIOD_H1,1,0,MODE_SMA,PRICE_CLOSE);
   //---
    return(INIT_SUCCEEDED);
   }
@@ -64,11 +55,7 @@ void OnDeinit(const int reason)
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick(){
-
-                  if(CopyBuffer(handleMd,0,0,1,averageMD) == 1 && CopyBuffer(handleMl,0,0,1,averageML) == 1 && CopyBuffer(handleMh,0,0,1,averageMH) == 1){
-                     Print("t");
-                  }
-   /*
+   
   if(verifyTimeToProtection()){
       int copiedPrice = CopyRates(_Symbol,_Period,0,2,candles);
       if(copiedPrice == 2){
@@ -78,12 +65,11 @@ void OnTick(){
             }else{
                if(waitNewCandleMacro <= 0){
                   if(hasPositionOpen()){
-                   //  PlaySound("sounds/smb_gameover.wav");
-                     //valueDealEntryPriceMacro = activeStopMovel(valueDealEntryPriceMacro, candles[1]);
+                     valueDealEntryPriceMacro = activeStopMovelPerPoints(channelSize, candles[1]);
                   }else{
                      if(!crossOverBorderMacro){
                         orientationMacroRobot = recoverOrientation(candles[1].close);
-                       // decideToBuyOrSellMacroRobot(orientationMacroRobot, candles[0], candles[1].close);
+                        decideToBuyOrSellMacroRobot(orientationMacroRobot, candles[1].close);
                      }
                   }
                }
@@ -92,28 +78,33 @@ void OnTick(){
       }
   }else{
       closeBuyOrSell(0);
-  }*/
+  }
 }
 
-void decideToBuyOrSellMacroRobot(ORIENTATION orient, MqlRates& candle, double closePrice){
+void decideToBuyOrSellMacroRobot(ORIENTATION orient, double closePrice){
       
    if(orient != MEDIUM ){
       if(hasPositionOpen() == false){ 
          double neededPoints = 0;
-         datetime actualTime = TimeCurrent();
          if(orient == UP){
-            neededPoints = (initPointMacro + (channelSize * _Point));
+            if(valueDealEntryPriceMacro <= 0){
+               neededPoints = (initPointMacro + (channelSize * _Point));
+            }else{
+               neededPoints = (valueDealEntryPriceMacro + (channelSize * _Point));
+            }
             if( closePrice > neededPoints){
                crossOverBorderMacro = true;
-              // PlaySound("sounds/smb_world_clear.wav");
-               toBuyOrToSellMediaRobot(orient, calcPoints(candle.low, closePrice), TAKE_PROFIT);
+               toBuyOrToSellMediaRobot(orient, channelSize, channelSize);
             }
          }else if(orient == DOWN){
-            neededPoints = (endPointMacro - (channelSize * _Point));
+            if(valueDealEntryPriceMacro <= 0){
+               neededPoints = (endPointMacro - (channelSize * _Point));
+            }else{
+               neededPoints = (valueDealEntryPriceMacro - (channelSize * _Point));
+            }
             if( closePrice < neededPoints){
                crossOverBorderMacro = true;
-              // PlaySound("sounds/smb_world_clear.wav");
-               toBuyOrToSellMediaRobot(orient, calcPoints(candle.high, closePrice), TAKE_PROFIT);
+               toBuyOrToSellMediaRobot(orient, channelSize, channelSize);
             }
          }
       }
@@ -141,7 +132,7 @@ bool isPossibleStartDeals(double closePrice){
          drawHorizontalLine(endPointMacro, TimeCurrent(), "support border", clrYellow);
          drawHorizontalLine(initPointMacro, TimeCurrent(), "resistance border", clrYellow);
          
-         double midPoints = calcPoints(initPointMacro, endPointMacro) * 0.25;
+         double midPoints = calcPoints(initPointMacro, endPointMacro) / 2;
          if(midPoints < PONTUATION_ESTIMATE){
             channelSize = midPoints;
          }
@@ -152,6 +143,11 @@ bool isPossibleStartDeals(double closePrice){
             bordersSupportAndResistanceMacro.min = closePrice;
          }
       }
+      /*double points = calcPoints(closePrice, initPointMacro);
+      if(points > PONTUATION_ESTIMATE){
+         endPointMacro = closePrice;
+         drawHorizontalLine(endPointMacro, TimeCurrent(), "support border", clrRed);
+      }*/
    }
    
    return (initPointMacro != 0 && endPointMacro != 0);
@@ -175,4 +171,29 @@ ORIENTATION recoverOrientation(double closePrice){
    return MEDIUM;
 }
 
+double  activeStopMovelPerPointsMacroRobot(double points, MqlRates& candle){
+   double newSlPrice = 0;
+   if(hasPositionOpen()){ 
+      double tpPrice = PositionGetDouble(POSITION_TP);
+      double slPrice = PositionGetDouble(POSITION_SL);
+      double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double pointsSl = calcPoints(candle.close, slPrice);
+      newSlPrice = slPrice;
+      
+      if(pointsSl > points){
+         if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
+            newSlPrice = MathAbs(slPrice + (points * _Point));
+            tradeLib.PositionModify(_Symbol, newSlPrice, tpPrice);
+         }else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
+            newSlPrice = MathAbs(slPrice - (points * _Point));
+            tradeLib.PositionModify(_Symbol, newSlPrice, tpPrice);
+         }
+         if(verifyResultTrade()){
+            Print("Stop movido");
+         }
+      }
+   }
+   
+   return newSlPrice;
+}
     

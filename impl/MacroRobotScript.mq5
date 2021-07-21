@@ -25,6 +25,7 @@ double valueDealEntryPriceMacro = 0;
 bool crossOverBorderMacro = false;
 int waitNewCandleMacro = 0;
 int lastDayMediaRobot = 0;
+bool enableSound = false;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -37,6 +38,7 @@ int OnInit()
      drawVerticalLine(startedDatetimeMacroRobot, "start day", clrRed);
      bordersSupportAndResistanceMacro.max = 0;
      bordersSupportAndResistanceMacro.min = 1000;
+     //PlaySound("sounds/smb_world_clear.wav");
   //---
    return(INIT_SUCCEEDED);
   }
@@ -47,15 +49,26 @@ void OnDeinit(const int reason)
   {
 //---
    
+     PlaySound(NULL);
   }
   
 
+void OnTradeTransaction(const MqlTradeTransaction & trans,
+                        const MqlTradeRequest & request,
+                        const MqlTradeResult & result)
+  {
+   ResetLastError(); 
+}
 
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick(){
    
+   //if(enableSound){
+    //   PlaySound("alert.wav");
+    //   enableSound = false;
+   //}
   if(verifyTimeToProtection()){
       int copiedPrice = CopyRates(_Symbol,_Period,0,2,candles);
       if(copiedPrice == 2){
@@ -65,7 +78,7 @@ void OnTick(){
             }else{
                if(waitNewCandleMacro <= 0){
                   if(hasPositionOpen()){
-                     PlaySound("sounds/smb_gameover.wav");
+                    // PlaySound("sounds/smb_gameover.wav");
                      //valueDealEntryPriceMacro = activeStopMovel(valueDealEntryPriceMacro, candles[1]);
                   }else{
                      if(!crossOverBorderMacro){
@@ -78,7 +91,7 @@ void OnTick(){
         }
       }
   }else{
-      closeBuyOrSell(0);
+      //closeBuyOrSell(0);
   }
 }
 
@@ -92,6 +105,7 @@ void decideToBuyOrSellMacroRobot(ORIENTATION orient, MqlRates& candle, double cl
             neededPoints = (initPointMacro + (channelSize * _Point));
             if( closePrice > neededPoints){
               // crossOverBorderMacro = true;
+               enableSound = true;
                PlaySound("sounds/smb_world_clear.wav");
                drawArrow(actualTime, "UP_ARROW" + TimeToString(actualTime), candle.high, UP, clrBlue); 
               // toBuyOrToSellMediaRobot(orient, calcPoints(candle.low, closePrice), TAKE_PROFIT);
@@ -99,7 +113,8 @@ void decideToBuyOrSellMacroRobot(ORIENTATION orient, MqlRates& candle, double cl
          }else if(orient == DOWN){
             neededPoints = (endPointMacro - (channelSize * _Point));
             if( closePrice < neededPoints){
-               //crossOverBorderMacro = true;
+              // crossOverBorderMacro = true;
+               enableSound = true;
                PlaySound("sounds/smb_world_clear.wav");
                drawArrow(actualTime, "DOWN_ARROW" + TimeToString(actualTime), candle.low, DOWN, clrBlue); 
                //toBuyOrToSellMediaRobot(orient, calcPoints(candle.high, closePrice), TAKE_PROFIT);
@@ -111,7 +126,6 @@ void decideToBuyOrSellMacroRobot(ORIENTATION orient, MqlRates& candle, double cl
 
 bool isPossibleStartDeals(double closePrice){
    if(isNewDay(startedDatetimeMacroRobot)){
-      PlaySound("sounds/smb_world_clear.wav");
       startedDatetimeMacroRobot = TimeCurrent();
       drawVerticalLine(startedDatetimeMacroRobot, "start day" + TimeToString(startedDatetimeMacroRobot), clrRed);
       bordersSupportAndResistanceMacro.min = 1000;
