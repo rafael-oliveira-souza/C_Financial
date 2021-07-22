@@ -132,10 +132,16 @@ int periodAval = 3;
 int OnInit()
   {
       handleIRVI = iRVI(_Symbol,PERIOD_CURRENT,5);
-      handleIRSI = iRSI(_Symbol,PERIOD_CURRENT,14,PRICE_CLOSE);
       handleICCI = iCCI(_Symbol,PERIOD_CURRENT,14,PRICE_TYPICAL);
-      handleStho=iStochastic(_Symbol,PERIOD_CURRENT,5,3,3,MODE_SMA,STO_LOWHIGH);
+      
+      if(USE_STHOCASTIC == ON){
+         handleStho=iStochastic(_Symbol,PERIOD_CURRENT,5,3,3,MODE_SMA,STO_LOWHIGH);
+      }
+      
 
+      if(USE_RSI == ON){
+         handleIRSI = iRSI(_Symbol,PERIOD_CURRENT,14,PRICE_CLOSE);
+      }
 //---
    
 //---
@@ -162,24 +168,19 @@ void OnTick()
             if(!hasPositionOpen()){
                if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval && 
                   CopyBuffer(handleIRVI,0,0,periodAval,RVI1) == periodAval && 
-                  CopyBuffer(handleIRVI,1,0,periodAval,RVI2) == periodAval && 
-                  CopyBuffer(handleStho,0,0,periodAval,STHO1) == periodAval &&  
-                  CopyBuffer(handleStho,1,0,periodAval,STHO2) == periodAval &&  
-                  CopyBuffer(handleIRSI,0,0,periodAval,RSI) == periodAval){
-                  ORIENTATION orientCCI, orientRVI, orientRSI, orientSTHO;
+                  CopyBuffer(handleIRVI,1,0,periodAval,RVI2) == periodAval){
+                  ORIENTATION orientCCI, orientRVI;
                   
                   orientCCI = verifyCCI();
                   orientRVI = verifyRVI();
-                  orientRSI = verifyRSI();
-                  orientSTHO = verifySTHO();
                   Print("Operando");
                   if(orientCCI != MEDIUM && orientCCI == orientRVI  && candles[periodAval-1].spread <= ACCEPTABLE_SPREAD){
                      if(VERIFY_BY_PERIOD == ON){
                         if(verifyCandleConfirmation(PERIOD, orientCCI)){
-                           realizeDealIndicators(orientCCI, orientRSI, orientSTHO);
+                           realizeDealIndicators(orientCCI);
                         }
                      }else{
-                        realizeDealIndicators(orientCCI, orientRSI, orientSTHO);
+                        realizeDealIndicators(orientCCI);
                      }
                   }
                }
@@ -199,23 +200,35 @@ void OnTick()
    }
 }
 
-void realizeDealIndicators(ORIENTATION orientCCI, ORIENTATION orientRSI, ORIENTATION orientSTHO){
+void realizeDealIndicators(ORIENTATION orientCCI){
    if(USE_RSI == ON){
+      realizeDealsRSI(orientCCI);
+   }else{
+      if(USE_STHOCASTIC == ON){
+         realizeDealsSthocastic(orientCCI);
+      }else{
+         toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+      }
+   }
+}
+
+void realizeDealsRSI(ORIENTATION orientCCI){    
+   if(CopyBuffer(handleIRSI,0,0,periodAval,RSI) == periodAval){
+      ORIENTATION orientRSI = verifyRSI();
       if(orientCCI == orientRSI){
          if(USE_STHOCASTIC == ON ){
-            if(orientCCI == orientSTHO){
-               toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
-            }
+            realizeDealsSthocastic(orientCCI);
          }else{
             toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
          }
       }
-   }else{
-      if(USE_STHOCASTIC == ON){
-         if(orientCCI == orientSTHO){
-            toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
-         }
-      }else{
+   }
+}
+
+void realizeDealsSthocastic(ORIENTATION orientCCI){
+   if( CopyBuffer(handleStho,0,0,periodAval,STHO1) == periodAval && CopyBuffer(handleStho,1,0,periodAval,STHO2) == periodAval){
+      ORIENTATION orientSTHO = verifySTHO(); 
+      if(orientCCI == orientSTHO){
          toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
       }
    }
