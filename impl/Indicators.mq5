@@ -103,16 +103,17 @@ input POWER USE_RSI = ON;
 input POWER USE_STHOCASTIC = ON;
 input POWER VERIFY_BY_PERIOD = OFF;
 input POWER EVALUATION_BY_TICK = ON;
+input double PERCENT_MOVE_STOP = 50;
 input double ACCEPTABLE_SPREAD = 20;
 input int PERIOD = 5;
-input int PONTUATION_ESTIMATE = 50;
-input double ACTIVE_VOLUME = 0.5;
+input int PONTUATION_ESTIMATE = 35;
+input double ACTIVE_VOLUME = 0.2;
 input double TAKE_PROFIT = 2000;
 input double STOP_LOSS = 450;
 input string SCHEDULE_START_DEALS = "01:00";
 input string SCHEDULE_END_DEALS = "23:30";
-input string SCHEDULE_START_PROTECTION = "17:30";
-input string SCHEDULE_END_PROTECTION = "19:30";
+input string SCHEDULE_START_PROTECTION = "18:30";
+input string SCHEDULE_END_PROTECTION = "20:30";
 
 MqlRates candles[];
 datetime actualDay = 0;
@@ -166,6 +167,7 @@ void OnTick()
       if(copiedPrice == 3){
          if(hasNewCandle()){
             if(!hasPositionOpen()){
+               Print("Verificando posicao");
                if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval && 
                   CopyBuffer(handleIRVI,0,0,periodAval,RVI1) == periodAval && 
                   CopyBuffer(handleIRVI,1,0,periodAval,RVI2) == periodAval){
@@ -173,7 +175,6 @@ void OnTick()
                   
                   orientCCI = verifyCCI();
                   orientRVI = verifyRVI();
-                  Print("Operando");
                   if(orientCCI != MEDIUM && orientCCI == orientRVI  && candles[periodAval-1].spread <= ACCEPTABLE_SPREAD){
                      if(VERIFY_BY_PERIOD == ON){
                         if(verifyCandleConfirmation(PERIOD, orientCCI)){
@@ -196,6 +197,7 @@ void OnTick()
          }
       }   
     }else{
+      Print("Horario de proteção");
       closeAllPositions();
    }
 }
@@ -339,7 +341,7 @@ void  activeStopMovelPerPoints(double points, int position = 0){
          tpPrice = NormalizeDouble((tpPrice + (points * _Point)), _Digits);
          if(slPrice >= entryPrice ){
             entryPoints = calcPoints(slPrice, currentPrice);
-            newSlPrice = NormalizeDouble((slPrice + (points / 2 * _Point)), _Digits);
+            newSlPrice = NormalizeDouble((slPrice + (points * PERCENT_MOVE_STOP / 100 * _Point)), _Digits);
             modify = true;
          }else if(currentPrice > entryPrice){
             entryPoints = calcPoints(entryPrice, currentPrice);
@@ -350,7 +352,7 @@ void  activeStopMovelPerPoints(double points, int position = 0){
          tpPrice = NormalizeDouble((tpPrice - (points * _Point)), _Digits);
          if(slPrice <= entryPrice ){
             entryPoints = calcPoints(slPrice, currentPrice);
-            newSlPrice = NormalizeDouble((slPrice - (points / 2 * _Point)), _Digits);
+            newSlPrice = NormalizeDouble((slPrice - (points * PERCENT_MOVE_STOP / 100 * _Point)), _Digits);
             modify = true;
          }else if(currentPrice < entryPrice){
             entryPoints = calcPoints(entryPrice, currentPrice);
