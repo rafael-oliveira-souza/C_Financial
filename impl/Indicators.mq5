@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                                          CCI.mq5 |
 //|                                  Copyright 2021, MetaQuotes Ltd. |
 //|                                             https://www.mql5.com |
@@ -165,6 +165,7 @@ void OnTick()
    if(verifyTimeToProtection()){
       int copiedPrice = CopyRates(_Symbol,_Period,0,3,candles);
       if(copiedPrice == 3){
+         double spread = candles[periodAval-1].spread;
          if(hasNewCandle()){
             if(!hasPositionOpen()){
                Print("Verificando posicao");
@@ -175,7 +176,7 @@ void OnTick()
                   
                   orientCCI = verifyCCI();
                   orientRVI = verifyRVI();
-                  if(orientCCI != MEDIUM && orientCCI == orientRVI  && candles[periodAval-1].spread <= ACCEPTABLE_SPREAD){
+                  if(orientCCI != MEDIUM && orientCCI == orientRVI  && spread <= ACCEPTABLE_SPREAD){
                      if(VERIFY_BY_PERIOD == ON){
                         if(verifyCandleConfirmation(PERIOD, orientCCI)){
                            realizeDealIndicators(orientCCI);
@@ -187,12 +188,12 @@ void OnTick()
                }
             }else{
                if(EVALUATION_BY_TICK == OFF){
-                  moveAllPositions();
+                  moveAllPositions(spread);
                }
             }
          }else{
             if(EVALUATION_BY_TICK == ON){
-               moveAllPositions();
+               moveAllPositions(spread);
             }
          }
       }   
@@ -236,11 +237,11 @@ void realizeDealsSthocastic(ORIENTATION orientCCI){
    }
 }
 
-void moveAllPositions(){
+void moveAllPositions(double spread){
    if(hasPositionOpen()){
       int pos = PositionsTotal() - 1;
       for(int i = pos; i >= 0; i--)  {
-         activeStopMovelPerPoints(PONTUATION_ESTIMATE, i);
+         activeStopMovelPerPoints(PONTUATION_ESTIMATE+spread, i);
       }
    }
 }
@@ -331,11 +332,15 @@ void  activeStopMovelPerPoints(double points, int position = 0){
       double tpPrice = PositionGetDouble(POSITION_TP);
       double slPrice = PositionGetDouble(POSITION_SL);
       double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double profit = PositionGetDouble(POSITION_PROFIT);
       double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
       double entryPoints = 0;
       bool modify = false;
       newSlPrice = slPrice;
       
+      if(profit / ACTIVE_VOLUME > 100){
+         Print("POSSIVEL INVERSAO");
+      }
       
       if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
          tpPrice = NormalizeDouble((tpPrice + (points * _Point)), _Digits);
