@@ -10,6 +10,9 @@
 
 
 #include <Trade\Trade.mqh>
+#include <Trade\PositionInfo.mqh>
+
+CPositionInfo  tradePosition;                   // trade position object
 CTrade tradeLib;
 
 enum TYPE_CANDLE{
@@ -106,6 +109,8 @@ input string SCHEDULE_START_DEALS = "23:20";
 input string SCHEDULE_END_DEALS = "01:00";
 input string SCHEDULE_START_PROTECTION = "18:30";
 input string SCHEDULE_END_PROTECTION = "19:30";
+input ulong MAGIC_NUMBER = 111222333444;
+input POWER USE_MAGIC_NUMBER = ON;
 
 MqlRates candles[];
 datetime actualDay = 0;
@@ -237,7 +242,7 @@ void invertAllPositions(){
 }
 
 void moveAllPositions(double spread){
-   if(hasPositionOpen()){
+   if(hasPositionOpen() && verifyMagicNumber() ){
       int pos = PositionsTotal() - 1;
       for(int i = pos; i >= 0; i--)  {
          activeStopMovelPerPoints(PONTUATION_ESTIMATE+spread, i);
@@ -361,7 +366,7 @@ void useInversion(double points, int position){
 
 void  activeStopMovelPerPoints(double points, int position = 0){
    double newSlPrice = 0;
-   if(hasPositionOpen()){ 
+   if(hasPositionOpen() && verifyMagicNumber()){ 
       double tpPrice = PositionGetDouble(POSITION_TP);
       double slPrice = PositionGetDouble(POSITION_SL);
       double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
@@ -486,6 +491,7 @@ void toSell(double volume, double stopLoss, double takeProfit){
 
 bool realizeDeals(TYPE_NEGOCIATION typeDeals, double volume, double stopLoss, double takeProfit){
    if(typeDeals != NONE){
+   
       BordersOperation borders = normalizeTakeProfitAndStopLoss(stopLoss, takeProfit); 
       if(hasPositionOpen() == false) {
          if(typeDeals == BUY){ 
@@ -496,7 +502,8 @@ bool realizeDeals(TYPE_NEGOCIATION typeDeals, double volume, double stopLoss, do
          }
          
          if(verifyResultTrade()){
-            //Print("Negociação realizada com sucesso.");
+            tradeLib.SetExpertMagicNumber(MAGIC_NUMBER);
+            Print("MAGIC NUMBER: " + IntegerToString(MAGIC_NUMBER));
             return true;
          }
        }
@@ -515,13 +522,25 @@ void closeAllPositions(){
 }
   
 void closeBuyOrSell(int position){
-   if(hasPositionOpen()){
+   if(hasPositionOpen() && verifyMagicNumber()){
       ulong ticket = PositionGetTicket(position);
       tradeLib.PositionClose(ticket);
       if(verifyResultTrade()){
          Print("Negociação concluída.");
       }
    }
+}
+
+bool verifyMagicNumber(){
+   ulong magicNumber = tradePosition.Magic();
+   if(USE_MAGIC_NUMBER == OFF){
+      return true;
+   }else{
+      if(magicNumber == MAGIC_NUMBER){
+         return true;
+      }
+   }
+   return false;
 }
 
 bool toBuyOrToSell(ORIENTATION orient, double volume, double stopLoss, double takeProfit){
