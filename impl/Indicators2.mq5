@@ -102,8 +102,8 @@ input int PONTUATION_ESTIMATE = 50;
 input double ACTIVE_VOLUME = 0.1;
 input double TAKE_PROFIT = 2000;
 input double STOP_LOSS = 450;
-input string SCHEDULE_START_DEALS = "00:01";
-input string SCHEDULE_END_DEALS = "00:59";
+input string SCHEDULE_START_DEALS = "23:20";
+input string SCHEDULE_END_DEALS = "01:00";
 input string SCHEDULE_START_PROTECTION = "18:30";
 input string SCHEDULE_END_PROTECTION = "19:30";
 
@@ -128,7 +128,7 @@ int OnInit()
       handleICCI = iCCI(_Symbol,PERIOD_CURRENT,14,PRICE_TYPICAL);
       
       if(USE_STHOCASTIC == ON){
-         handleStho=iStochastic(_Symbol,PERIOD_CURRENT,5,3,3,MODE_SMA,STO_LOWHIGH);
+         handleStho=iStochastic(_Symbol,PERIOD_CURRENT,14,3,3,MODE_SMA,STO_LOWHIGH);
       }
       
 
@@ -640,13 +640,14 @@ void createButton(string nameLine, int xx, int yy, int largura, int altura, int 
 }
 
 bool verifyTimeToProtection(){
-   if(timeToProtection(SCHEDULE_START_PROTECTION, SCHEDULE_END_PROTECTION)){
+   datetime now = TimeCurrent();
+   bool timeDeals = timeToProtection(SCHEDULE_START_DEALS, SCHEDULE_END_DEALS);
+   bool timeProtect = timeToProtection(SCHEDULE_START_PROTECTION, SCHEDULE_END_PROTECTION);
+   if(timeDeals || timeProtect){
      // Print("Horario de proteção ativo");
       return true;
-   }else if(timeToProtection(SCHEDULE_START_DEALS, SCHEDULE_END_DEALS)){
-      //Print("Fim do tempo operacional. Encerrando Negociações");
-      return true;
    }
+   
    return false;
 }
 
