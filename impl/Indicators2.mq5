@@ -104,11 +104,11 @@ input int PERIOD = 5;
 input int PONTUATION_ESTIMATE = 50;
 input double ACTIVE_VOLUME = 0.1;
 input double TAKE_PROFIT = 2000;
-input double STOP_LOSS = 450;
+input double STOP_LOSS = 600;
 input string SCHEDULE_START_DEALS = "23:20";
 input string SCHEDULE_END_DEALS = "01:00";
-input string SCHEDULE_START_PROTECTION = "18:30";
-input string SCHEDULE_END_PROTECTION = "19:30";
+input string SCHEDULE_START_PROTECTION = "00:00";
+input string SCHEDULE_END_PROTECTION = "00:00";
 input ulong MAGIC_NUMBER = 111222333444;
 input POWER USE_MAGIC_NUMBER = ON;
 
@@ -233,7 +233,7 @@ void realizeDealsSthocastic(ORIENTATION orientCCI){
 }
 
 void invertAllPositions(){
-   if(hasPositionOpen()){
+   if(hasPositionOpen()  && verifyMagicNumber()){
       int pos = PositionsTotal() - 1;
       for(int i = pos; i >= 0; i--)  {
          useInversion(PONTUATION_ESTIMATE, i);
@@ -242,7 +242,7 @@ void invertAllPositions(){
 }
 
 void moveAllPositions(double spread){
-   if(hasPositionOpen() && verifyMagicNumber() ){
+   if(hasPositionOpen()  && verifyMagicNumber()){
       int pos = PositionsTotal() - 1;
       for(int i = pos; i >= 0; i--)  {
          activeStopMovelPerPoints(PONTUATION_ESTIMATE+spread, i);
@@ -366,7 +366,7 @@ void useInversion(double points, int position){
 
 void  activeStopMovelPerPoints(double points, int position = 0){
    double newSlPrice = 0;
-   if(hasPositionOpen() && verifyMagicNumber()){ 
+   if(hasPositionOpen()){ 
       double tpPrice = PositionGetDouble(POSITION_TP);
       double slPrice = PositionGetDouble(POSITION_SL);
       double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
@@ -493,7 +493,7 @@ bool realizeDeals(TYPE_NEGOCIATION typeDeals, double volume, double stopLoss, do
    if(typeDeals != NONE){
    
       BordersOperation borders = normalizeTakeProfitAndStopLoss(stopLoss, takeProfit); 
-      if(hasPositionOpen() == false) {
+      if(hasPositionOpen() == false && verifyMagicNumber()) {
          if(typeDeals == BUY){ 
             toBuy(volume, borders.min, borders.max);
          }
@@ -522,7 +522,7 @@ void closeAllPositions(){
 }
   
 void closeBuyOrSell(int position){
-   if(hasPositionOpen() && verifyMagicNumber()){
+   if(hasPositionOpen()  && verifyMagicNumber()){
       ulong ticket = PositionGetTicket(position);
       tradeLib.PositionClose(ticket);
       if(verifyResultTrade()){
