@@ -129,7 +129,7 @@ int periodAval = 3;
 //+------------------------------------------------------------------+
 int OnInit()
   {
-      handleIRVI = iRVI(_Symbol,PERIOD_CURRENT,5);
+      handleIRVI = iRVI(_Symbol,PERIOD_CURRENT,3);
       handleICCI = iCCI(_Symbol,PERIOD_CURRENT,14,PRICE_TYPICAL);
       
       if(USE_STHOCASTIC == ON){
@@ -164,8 +164,8 @@ void OnTick()
       if(copiedPrice == 3){
          double spread = candles[periodAval-1].spread;
          if(hasNewCandle()){
-            if(!hasPositionOpen()){
-               Print("Verificando posicao");
+            Print("New Candle");
+            if(!hasPositionOpen() || (hasPositionOpen()  && !verifyMagicNumber())){
                if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval && 
                   CopyBuffer(handleIRVI,0,0,periodAval,RVI1) == periodAval && 
                   CopyBuffer(handleIRVI,1,0,periodAval,RVI2) == periodAval){
@@ -173,6 +173,8 @@ void OnTick()
                   
                   orientCCI = verifyCCI();
                   orientRVI = verifyRVI();
+                  Print("CCI: " + verifyPeriod(orientCCI));
+                  Print("RVI: " + verifyPeriod(orientRVI));
                   if(orientCCI != MEDIUM && orientCCI == orientRVI  && spread <= ACCEPTABLE_SPREAD){
                      realizeDealIndicators(orientCCI);
                   }
@@ -198,6 +200,17 @@ void OnTick()
    }
 }
 
+string verifyPeriod(ORIENTATION orient){
+   if(orient == DOWN){
+      return "DOWN";
+   }
+   if(orient == UP){
+      return "UP";
+   }
+   
+   return "MEDIUM";
+}
+
 void realizeDealIndicators(ORIENTATION orientCCI){
    if(USE_RSI == ON){
       realizeDealsRSI(orientCCI);
@@ -213,6 +226,7 @@ void realizeDealIndicators(ORIENTATION orientCCI){
 void realizeDealsRSI(ORIENTATION orientCCI){    
    if(CopyBuffer(handleIRSI,0,0,periodAval,RSI) == periodAval){
       ORIENTATION orientRSI = verifyRSI();
+      Print("RSI: " + verifyPeriod(orientRSI));
       if(orientCCI == orientRSI){
          if(USE_STHOCASTIC == ON ){
             realizeDealsSthocastic(orientCCI);
@@ -226,6 +240,7 @@ void realizeDealsRSI(ORIENTATION orientCCI){
 void realizeDealsSthocastic(ORIENTATION orientCCI){
    if( CopyBuffer(handleStho,0,0,periodAval,STHO1) == periodAval && CopyBuffer(handleStho,1,0,periodAval,STHO2) == periodAval){
       ORIENTATION orientSTHO = verifySTHO(); 
+      Print("STHOCASTIC: " + verifyPeriod(orientSTHO));
       if(orientCCI == orientSTHO){
          toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
       }
@@ -233,7 +248,7 @@ void realizeDealsSthocastic(ORIENTATION orientCCI){
 }
 
 void invertAllPositions(){
-   if(hasPositionOpen()  && verifyMagicNumber()){
+   if(hasPositionOpen()){
       int pos = PositionsTotal() - 1;
       for(int i = pos; i >= 0; i--)  {
          useInversion(PONTUATION_ESTIMATE, i);
@@ -242,7 +257,7 @@ void invertAllPositions(){
 }
 
 void moveAllPositions(double spread){
-   if(hasPositionOpen()  && verifyMagicNumber()){
+   if(hasPositionOpen()){
       int pos = PositionsTotal() - 1;
       for(int i = pos; i >= 0; i--)  {
          activeStopMovelPerPoints(PONTUATION_ESTIMATE+spread, i);
@@ -277,11 +292,11 @@ ORIENTATION verifyCandleConfirmation(int period) {
 
 ORIENTATION verifyRVI(){
    if(RVI1[periodAval-1] < RVI2[periodAval-1] && RVI2[periodAval-1] < 0){
-      Print("Trend DOWN");
+      //Print("Trend DOWN");
       return DOWN;
    }
    if(RVI1[periodAval-1] > RVI2[periodAval-1] && RVI1[periodAval-1] > 0){
-      Print("Trend UP");
+      //Print("Trend UP");
       return UP;
    }
    
@@ -332,7 +347,7 @@ ORIENTATION verifyCCI(){
 
 void useInversion(double points, int position){
    double newSlPrice = 0;
-   if(hasPositionOpen()){ 
+   if(hasPositionOpen()  && verifyMagicNumber()){ 
       double profit = PositionGetDouble(POSITION_PROFIT);
       double pointsInversion =  MathAbs(profit / ACTIVE_VOLUME);
       double stop = (STOP_LOSS < 100 ? STOP_LOSS : 100),  maxLoss = (STOP_LOSS * PERCENT_INVERSION / 100);
@@ -366,7 +381,7 @@ void useInversion(double points, int position){
 
 void  activeStopMovelPerPoints(double points, int position = 0){
    double newSlPrice = 0;
-   if(hasPositionOpen()){ 
+   if(hasPositionOpen() && verifyMagicNumber()){ 
       double tpPrice = PositionGetDouble(POSITION_TP);
       double slPrice = PositionGetDouble(POSITION_SL);
       double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
