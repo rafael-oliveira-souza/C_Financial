@@ -493,7 +493,7 @@ bool realizeDeals(TYPE_NEGOCIATION typeDeals, double volume, double stopLoss, do
    if(typeDeals != NONE){
    
       BordersOperation borders = normalizeTakeProfitAndStopLoss(stopLoss, takeProfit); 
-      if(hasPositionOpen() == false && verifyMagicNumber()) {
+      if(hasPositionOpen() == false) {
          if(typeDeals == BUY){ 
             toBuy(volume, borders.min, borders.max);
          }
