@@ -288,15 +288,39 @@ ORIENTATION verifyCandleConfirmation(int period) {
    return MEDIUM;
 } 
   
-ORIENTATION verifyHeikenAshi(){
-    double close, open, high, low;
+bool verifyHeikenAshi(int period){
+    MqlRates newCandle, prevCandle, actualCandle;
+    int periodHeiken = period + 1;
     
-    close = (open+high+Low+close)/4
-    open = [open (previous bar) + Close (previous bar)]/2
-    high = Max (high,open,close)
-    low = Min (low,open, close)
+   int copiedPrice = CopyRates(_Symbol,_Period,0,periodHeiken,candles);
+   if(copiedPrice == periodHeiken){
+      for(int i = 0; i < period; i++){
+         prevCandle = candles[0];
+         actualCandle = candles[i+1];
+         newCandle.close = (actualCandle.open + actualCandle.high + actualCandle.low + actualCandle.close) / 4;
+         newCandle.open = (prevCandle.open + prevCandle.close) / 2;
+       
+          if(actualCandle.high >= actualCandle.open && actualCandle.high >= actualCandle.close){
+            newCandle.high = actualCandle.high;
+          }else if(actualCandle.open >= actualCandle.high && actualCandle.open >= actualCandle.close){
+            newCandle.high = actualCandle.open;
+          }else if(actualCandle.close >= actualCandle.open && actualCandle.close >= actualCandle.high){
+            newCandle.high = actualCandle.close;
+          }
+          
+          if(actualCandle.high <= actualCandle.open && actualCandle.high <= actualCandle.close){
+            newCandle.low = actualCandle.high;
+          }else if(actualCandle.open <= actualCandle.high && actualCandle.open <= actualCandle.close){
+            newCandle.low = actualCandle.open;
+          }else if(actualCandle.close <= actualCandle.open && actualCandle.close <= actualCandle.high){
+            newCandle.low = actualCandle.close;
+          }
+       }
+       
+       Print(newCandle.close);
+    }
     
-    return MEDIUM;
+    return false;
 }
 
 //+------------------------------------------------------------------+
