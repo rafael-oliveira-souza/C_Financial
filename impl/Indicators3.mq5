@@ -91,10 +91,11 @@ struct PeriodProtectionTime {
    bool instantiated;
 };
 
-
 input POWER USE_RSI = ON;
 input POWER USE_STHOCASTIC = ON;
+input POWER USE_FORCE_INDEX = ON;
 input POWER EVALUATION_BY_TICK = ON;
+input POWER USE_HEIKEN_ASHI = ON;
 input POWER USE_INVERSION = OFF;
 input double PERCENT_INVERSION = 90;
 input double MULTIPLIER_INVERSION = 2;
@@ -103,13 +104,13 @@ input double ACCEPTABLE_SPREAD = 20;
 input int PERIOD = 5;
 input int PONTUATION_ESTIMATE = 50;
 input double ACTIVE_VOLUME = 0.1;
-input double TAKE_PROFIT = 2000;
+input double TAKE_PROFIT = 3500;
 input double STOP_LOSS = 600;
 input string SCHEDULE_START_DEALS = "23:20";
 input string SCHEDULE_END_DEALS = "01:00";
 input string SCHEDULE_START_PROTECTION = "00:00";
 input string SCHEDULE_END_PROTECTION = "00:00";
-input ulong MAGIC_NUMBER = 111222333444;
+input ulong MAGIC_NUMBER = 1999999990000094;
 input POWER USE_MAGIC_NUMBER = ON;
 
 MqlRates candles[];
@@ -119,7 +120,7 @@ MqlTick tick;                // variável para armazenar ticks
 
 
 double averageJAW[], averageTEETH[], averageLIPS[], averageFrac[], upperFractal[], lowerFractal[], CCI[], RSI[], RVI1[], RVI2[], STHO1[], STHO2[], valuePrice = 0;
-int teeth, jaw, lips, handleFractal, fractMedia, handleICCI, handleIRSI, handleIRVI, handleStho, countAverage = 0;
+int teeth, jaw, lips, handleFractal, fractMedia, handleICCI, handleIRSI, handleIRVI, handleStho, handleFI, countAverage = 0;
 ORIENTATION orientMacro = MEDIUM;
 BordersOperation bordersFractal;
 bool waitCloseJaw = false;
@@ -140,11 +141,15 @@ int OnInit()
       if(USE_RSI == ON){
          handleIRSI = iRSI(_Symbol,PERIOD_CURRENT,14,PRICE_CLOSE);
       }
-//---
-   
+      
+      if(USE_FORCE_INDEX == ON){
+         handleFI = iForce(_Symbol,PERIOD_CURRENT,14,MODE_SMA,VOLUME_TICK);
+      }
 //---
    return(INIT_SUCCEEDED);
   }
+  
+  
 //+------------------------------------------------------------------+
 //| Expert deinitialization function                                 |
 //+------------------------------------------------------------------+
@@ -175,8 +180,10 @@ void OnTick()
                   orientRVI = verifyRVI();
                   Print("CCI: " + verifyPeriod(orientCCI));
                   Print("RVI: " + verifyPeriod(orientRVI));
-                  if(orientCCI != MEDIUM && orientCCI == orientRVI  && spread <= ACCEPTABLE_SPREAD){
-                     realizeDealIndicators(orientCCI);
+                  if( spread <= ACCEPTABLE_SPREAD){
+                     if(orientCCI != MEDIUM && (orientCCI == orientRVI)){
+                        realizeDealIndicators(orientCCI);
+                     }
                   }
                }
             }else{
@@ -218,7 +225,7 @@ void realizeDealIndicators(ORIENTATION orientCCI){
       if(USE_STHOCASTIC == ON){
          realizeDealsSthocastic(orientCCI);
       }else{
-         toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+         verifyToBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
       }
    }
 }
@@ -231,7 +238,7 @@ void realizeDealsRSI(ORIENTATION orientCCI){
          if(USE_STHOCASTIC == ON ){
             realizeDealsSthocastic(orientCCI);
          }else{
-            toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+            verifyToBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
          }
       }
    }
@@ -242,8 +249,24 @@ void realizeDealsSthocastic(ORIENTATION orientCCI){
       ORIENTATION orientSTHO = verifySTHO(); 
       Print("STHOCASTIC: " + verifyPeriod(orientSTHO));
       if(orientCCI == orientSTHO){
-         toBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+         verifyToBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
       }
+   }
+}
+
+void verifyToBuyOrToSell(ORIENTATION orient, double volume, double stop, double take){
+   if(USE_HEIKEN_ASHI == ON){
+      ORIENTATION orient2 = verifyHeikenAshi(PERIOD);
+      if(orient2 != MEDIUM && orient2 != orient){
+         toBuyOrToSell(orient, volume, stop, take);
+      }
+   }else if(USE_FORCE_INDEX == ON){
+      ORIENTATION orientFI = verifyForceIndex();
+      if(orientFI == orient){
+         toBuyOrToSell(orient, volume, stop, take);
+      }
+   }else{
+      toBuyOrToSell(orient, volume, stop, take);
    }
 }
 
@@ -287,15 +310,37 @@ ORIENTATION verifyCandleConfirmation(int period) {
    
    return MEDIUM;
 } 
+
+ORIENTATION verifyForceIndex(){
+   double forceIArray[], forceValue, fiMax = 0, fiMin = 0, points;
+   //ArraySetAsSeries(forceIArray, true);   
+   
+   if(CopyBuffer(handleFI,0,0,handleFI,forceIArray) == handleFI){
+      forceValue = NormalizeDouble(forceIArray[handleFI-1], _Digits);
+      //fiMax = forceIArray[ArrayMaximum(forceIArray,0,handleFI/2)];
+      //fiMin = forceIArray[ArrayMinimum(forceIArray,0,handleFI/2)];
+      //points = calcPoints(fiMax, 0);
+      //points = calcPoints(fiMin, 0);
+      if(forceValue > 0 ){
+         return DOWN;
+      }else if(forceValue < 0 ){
+         return UP;
+      }
+   }
+   
+   return MEDIUM;
+}
   
-bool verifyHeikenAshi(int period){
-    MqlRates newCandle, prevCandle, actualCandle;
-    int periodHeiken = period + 1;
-    
+ORIENTATION verifyHeikenAshi(int period){
+   MqlRates newCandle, prevCandle, actualCandle;
+   int periodHeiken = period + 3;
+   int down = 0, up = 0, doji = 0, lastDown = 0, lastUp = 0, lastDoji = 0;
+   double points, shadowH, shadowL;
+   
    int copiedPrice = CopyRates(_Symbol,_Period,0,periodHeiken,candles);
    if(copiedPrice == periodHeiken){
-      for(int i = 0; i < period; i++){
-         prevCandle = candles[0];
+      for(int i = 0; i < periodHeiken-2; i++){
+         prevCandle = candles[i];
          actualCandle = candles[i+1];
          newCandle.close = (actualCandle.open + actualCandle.high + actualCandle.low + actualCandle.close) / 4;
          newCandle.open = (prevCandle.open + prevCandle.close) / 2;
@@ -315,12 +360,72 @@ bool verifyHeikenAshi(int period){
           }else if(actualCandle.close <= actualCandle.open && actualCandle.close <= actualCandle.high){
             newCandle.low = actualCandle.close;
           }
+          
+          points = calcPoints(newCandle.close, newCandle.open);
+          if(points > 5){
+             if(verifyIfOpenBiggerThanClose(newCandle)){
+                shadowH = calcPoints(newCandle.high, newCandle.open);
+               shadowL = calcPoints(newCandle.low, newCandle.close);
+               if(shadowH >= points && shadowL >= points){
+                  if(i >= period ){
+                     lastDoji++;
+                  }else{
+                     doji++;
+                  }
+               }else{
+                  if(i >= period ){
+                     lastDown++;
+                  }else{
+                     down++;
+                  }
+               }/**/
+             }else if(!verifyIfOpenBiggerThanClose(newCandle)){
+               shadowH = calcPoints(newCandle.high, newCandle.close);
+               shadowL = calcPoints(newCandle.low, newCandle.open);
+               if(shadowH >= points && shadowL >= points){
+                  if(i >= period ){
+                     lastDoji++;
+                  }else{
+                     doji++;
+                  }
+               }else{
+                  if(i >= period ){
+                     lastUp++;
+                  }else{
+                     up++;
+                  }
+               }/**/
+             }
+          }
        }
        
-       Print(newCandle.close);
+       datetime actual = TimeCurrent();   
+       if(down > period /2){
+         //drawVerticalLine(actual, "heiken-" + IntegerToString(actual), clrBlue);
+         //return DOWN;
+         if(lastDoji >= 1){
+            drawVerticalLine(actual, "heiken-" + IntegerToString(actual), clrBlue);
+            return UP;
+         }
+         if(lastDown == 1){
+            drawVerticalLine(actual, "heiken-" + IntegerToString(actual), clrYellow);
+            return DOWN;
+         } /**/
+       }else if(up > period /2){
+         //drawVerticalLine(actual, "heiken-" + IntegerToString(actual), clrYellow);
+         //return UP;
+         if(lastDoji == 1 ){
+            drawVerticalLine(actual, "heiken-" + IntegerToString(actual), clrYellow);
+            return DOWN;
+         }
+         if(lastUp >= 1){
+            drawVerticalLine(actual, "heiken-" + IntegerToString(actual), clrBlue);
+            return UP;
+         }/* */
+       }
     }
     
-    return false;
+    return MEDIUM;
 }
 
 //+------------------------------------------------------------------+
@@ -390,24 +495,19 @@ void useInversion(double points, int position){
       ORIENTATION orient = MEDIUM;
       
       if(USE_INVERSION == ON && profit < 0){
-             orient = verifyCandleConfirmation(PERIOD);
          if(PERCENT_INVERSION > 0 && pointsInversion >= maxLoss){
             inversion = true;
             if(STOP_LOSS - maxLoss > stop){
                stop = STOP_LOSS - maxLoss;
             }
              if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
-                if(orient == UP){
-                   closeBuyOrSell(position);
-                   realizeDeals(SELL, ACTIVE_VOLUME*MULTIPLIER_INVERSION, stop, TAKE_PROFIT);
-                   return;
-                }
+                closeBuyOrSell(position);
+                realizeDeals(SELL, ACTIVE_VOLUME*MULTIPLIER_INVERSION, stop, TAKE_PROFIT);
+                return;
              }else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
-                 if(orient == DOWN){
-                   closeBuyOrSell(position);
-                   realizeDeals(BUY, ACTIVE_VOLUME*MULTIPLIER_INVERSION, stop, TAKE_PROFIT);
-                   return;
-                }
+                closeBuyOrSell(position);
+                realizeDeals(BUY, ACTIVE_VOLUME*MULTIPLIER_INVERSION, stop, TAKE_PROFIT);
+                return;
              }
          }
       }
