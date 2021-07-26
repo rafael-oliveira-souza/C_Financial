@@ -95,7 +95,7 @@ input POWER USE_RSI = ON;
 input POWER USE_STHOCASTIC = ON;
 input POWER USE_FORCE_INDEX = ON;
 input POWER EVALUATION_BY_TICK = ON;
-input POWER USE_HEIKEN_ASHI = ON;
+input POWER USE_HEIKEN_ASHI = OFF;
 input POWER USE_INVERSION = OFF;
 input double PERCENT_INVERSION = 90;
 input double MULTIPLIER_INVERSION = 2;
@@ -104,13 +104,13 @@ input double ACCEPTABLE_SPREAD = 20;
 input int PERIOD = 5;
 input int PONTUATION_ESTIMATE = 50;
 input double ACTIVE_VOLUME = 0.1;
-input double TAKE_PROFIT = 3500;
-input double STOP_LOSS = 600;
+input double TAKE_PROFIT = 300;
+input double STOP_LOSS = 450;
 input string SCHEDULE_START_DEALS = "23:20";
 input string SCHEDULE_END_DEALS = "01:00";
 input string SCHEDULE_START_PROTECTION = "00:00";
 input string SCHEDULE_END_PROTECTION = "00:00";
-input ulong MAGIC_NUMBER = 1999999990000094;
+input ulong MAGIC_NUMBER = 3232131231231231;
 input POWER USE_MAGIC_NUMBER = ON;
 
 MqlRates candles[];
@@ -170,40 +170,45 @@ void OnTick()
          double spread = candles[periodAval-1].spread;
          if(hasNewCandle()){
             Print("New Candle");
-            if(!hasPositionOpen() || (hasPositionOpen()  && !verifyMagicNumber())){
-               if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval && 
-                  CopyBuffer(handleIRVI,0,0,periodAval,RVI1) == periodAval && 
-                  CopyBuffer(handleIRVI,1,0,periodAval,RVI2) == periodAval){
-                  ORIENTATION orientCCI, orientRVI;
-                  
-                  orientCCI = verifyCCI();
-                  orientRVI = verifyRVI();
-                  Print("CCI: " + verifyPeriod(orientCCI));
-                  Print("RVI: " + verifyPeriod(orientRVI));
-                  if( spread <= ACCEPTABLE_SPREAD){
-                     if(orientCCI != MEDIUM && (orientCCI == orientRVI)){
-                        realizeDealIndicators(orientCCI);
-                     }
-                  }
-               }
-            }else{
-               if(USE_INVERSION == ON){
-                  invertAllPositions();
-               }
-               
-               if(EVALUATION_BY_TICK == OFF){
-                  moveAllPositions(spread);
-               }
+            if(EVALUATION_BY_TICK == OFF){
+               toNegociate(spread);
             }
+            
          }else{
             if(EVALUATION_BY_TICK == ON){
-               moveAllPositions(spread);
+               toNegociate(spread);
             }
          }
       }   
     }else{
       Print("Horario de proteção");
       closeAllPositions();
+   }
+}
+
+void toNegociate(double spread){
+   if(!hasPositionOpen() || (hasPositionOpen()  && !verifyMagicNumber())){
+      if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval && 
+         CopyBuffer(handleIRVI,0,0,periodAval,RVI1) == periodAval && 
+         CopyBuffer(handleIRVI,1,0,periodAval,RVI2) == periodAval){
+         ORIENTATION orientCCI, orientRVI;
+         
+         orientCCI = verifyCCI();
+         orientRVI = verifyRVI();
+         Print("CCI: " + verifyPeriod(orientCCI));
+         Print("RVI: " + verifyPeriod(orientRVI));
+         if( spread <= ACCEPTABLE_SPREAD){
+            if(orientCCI != MEDIUM && (orientCCI == orientRVI)){
+               realizeDealIndicators(orientCCI);
+            }
+         }
+      }
+   }else{
+      if(USE_INVERSION == ON){
+         invertAllPositions();
+      }
+      
+      moveAllPositions(spread);
    }
 }
 
