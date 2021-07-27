@@ -170,13 +170,39 @@ void OnTick()
          double spread = candles[periodAval-1].spread;
          if(hasNewCandle()){
             Print("New Candle");
-            if(EVALUATION_BY_TICK == OFF){
-               toNegociate(spread);
+            if(!hasPositionOpen() || (hasPositionOpen()  && !verifyMagicNumber())){
+               if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval && 
+                  CopyBuffer(handleIRVI,0,0,periodAval,RVI1) == periodAval && 
+                  CopyBuffer(handleIRVI,1,0,periodAval,RVI2) == periodAval){
+                  ORIENTATION orientCCI, orientRVI;
+                  
+                  orientCCI = verifyCCI();
+                  orientRVI = verifyRVI();
+                  Print("CCI: " + verifyPeriod(orientCCI));
+                  Print("RVI: " + verifyPeriod(orientRVI));
+                  if( spread <= ACCEPTABLE_SPREAD){
+                     if(orientCCI != MEDIUM && (orientCCI == orientRVI)){
+                        realizeDealIndicators(orientCCI);
+                     }
+                  }
+               }else{
+                  if(USE_INVERSION == ON){
+                     invertAllPositions();
+                  }
+      
+                  if(EVALUATION_BY_TICK == OFF){
+                     moveAllPositions(spread);
+                  }
+              // toNegociate(spread);
+               }
             }
             
          }else{
             if(EVALUATION_BY_TICK == ON){
-               toNegociate(spread);
+               moveAllPositions(spread);
+            }
+            if(USE_INVERSION == ON){
+               invertAllPositions();
             }
          }
       }   
@@ -253,7 +279,7 @@ void realizeDealsSthocastic(ORIENTATION orientCCI){
    if( CopyBuffer(handleStho,0,0,periodAval,STHO1) == periodAval && CopyBuffer(handleStho,1,0,periodAval,STHO2) == periodAval){
       ORIENTATION orientSTHO = verifySTHO(); 
       Print("STHOCASTIC: " + verifyPeriod(orientSTHO));
-      if(orientCCI == orientSTHO){
+      if(orientCCI == orientSTHO ){
          verifyToBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
       }
    }
@@ -326,9 +352,9 @@ ORIENTATION verifyForceIndex(){
       //fiMin = forceIArray[ArrayMinimum(forceIArray,0,handleFI/2)];
       //points = calcPoints(fiMax, 0);
       //points = calcPoints(fiMin, 0);
-      if(forceValue > 0 ){
+      if(forceValue >= 0.05 ){
          return DOWN;
-      }else if(forceValue < 0 ){
+      }else if(forceValue <= -0.05 ){
          return UP;
       }
    }
