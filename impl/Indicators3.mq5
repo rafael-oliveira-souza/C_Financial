@@ -91,12 +91,13 @@ struct PeriodProtectionTime {
    bool instantiated;
 };
 
-input POWER USE_RSI = ON;
-input POWER USE_STHOCASTIC = ON;
-input POWER USE_FORCE_INDEX = ON;
-input POWER EVALUATION_BY_TICK = ON;
-input POWER USE_HEIKEN_ASHI = OFF;
-input POWER USE_INVERSION = OFF;
+input POWER  USE_RSI = ON;
+input POWER  USE_STHOCASTIC = ON;
+input POWER  USE_FORCE_INDEX = ON;
+input POWER  EVALUATION_BY_TICK = ON;
+input POWER  USE_HEIKEN_ASHI = OFF;
+input POWER  USE_INVERSION = OFF;
+input POWER  POWER_OFF_MOVE_STOP = OFF;
 input double PERCENT_INVERSION = 90;
 input double MULTIPLIER_INVERSION = 2;
 input double PERCENT_MOVE_STOP = 50;
@@ -120,7 +121,7 @@ MqlTick tick;                // variável para armazenar ticks
 
 
 double averageJAW[], averageTEETH[], averageLIPS[], averageFrac[], upperFractal[], lowerFractal[], CCI[], RSI[], RVI1[], RVI2[], STHO1[], STHO2[], valuePrice = 0;
-int teeth, jaw, lips, handleFractal, fractMedia, handleICCI, handleIRSI, handleIRVI, handleStho, handleFI, countAverage = 0;
+int teeth, jaw, lips, handleFractal, fractMedia, handleICCI, handleIRSI, handleIRVI, handleStho, handleFI, handleWeek, countAverage = 0;
 ORIENTATION orientMacro = MEDIUM;
 BordersOperation bordersFractal;
 bool waitCloseJaw = false;
@@ -132,6 +133,7 @@ int OnInit()
   {
       handleIRVI = iRVI(_Symbol,PERIOD_CURRENT,3);
       handleICCI = iCCI(_Symbol,PERIOD_CURRENT,14,PRICE_TYPICAL);
+      handleWeek = iMA(_Symbol,PERIOD_H1,1,0,MODE_SMA,PRICE_CLOSE);
       
       if(USE_STHOCASTIC == ON){
          handleStho=iStochastic(_Symbol,PERIOD_CURRENT,14,3,3,MODE_SMA,STO_LOWHIGH);
@@ -311,8 +313,19 @@ void invertAllPositions(){
 }
 
 void moveAllPositions(double spread){
-   if(hasPositionOpen()){
-      int pos = PositionsTotal() - 1;
+   if(hasPositionOpen() && POWER_OFF_MOVE_STOP == OFF){
+      int max, min, pos = PositionsTotal() - 1;
+      double  average[];
+      
+      if(CopyBuffer(handleWeek,0,0,PERIOD,average) == PERIOD){
+         max = ArrayMaximum(average, 0, PERIOD);
+         min = ArrayMinimum(average, 0, PERIOD);
+         
+         datetime actualTime = TimeCurrent();
+         drawHorizontalLine(average[max], actualTime, "border-max", clrYellow);
+         drawHorizontalLine(average[min], actualTime, "border-min", clrYellow);
+      }
+      
       for(int i = pos; i >= 0; i--)  {
          activeStopMovelPerPoints(PONTUATION_ESTIMATE+spread, i);
       }
@@ -343,7 +356,7 @@ ORIENTATION verifyCandleConfirmation(int period) {
 } 
 
 ORIENTATION verifyForceIndex(){
-   double forceIArray[], forceValue, fiMax = 0, fiMin = 0, points;
+   double forceIArray[], forceValue, fiMax = 0, fiMin = 0;
    //ArraySetAsSeries(forceIArray, true);   
    
    if(CopyBuffer(handleFI,0,0,handleFI,forceIArray) == handleFI){
@@ -518,7 +531,7 @@ ORIENTATION verifyCCI(){
 
 void useInversion(double points, int position){
    double newSlPrice = 0;
-   if(hasPositionOpen()  && verifyMagicNumber()){ 
+   if(hasPositionOpen()  && verifyMagicNumber(position)){ 
       double profit = PositionGetDouble(POSITION_PROFIT);
       double pointsInversion =  MathAbs(profit / ACTIVE_VOLUME);
       double stop = (STOP_LOSS < 100 ? STOP_LOSS : 100),  maxLoss = (STOP_LOSS * PERCENT_INVERSION / 100);
@@ -547,7 +560,7 @@ void useInversion(double points, int position){
 
 void  activeStopMovelPerPoints(double points, int position = 0){
    double newSlPrice = 0;
-   if(hasPositionOpen() && verifyMagicNumber()){ 
+   if(hasPositionOpen() && verifyMagicNumber(position)){ 
       double tpPrice = PositionGetDouble(POSITION_TP);
       double slPrice = PositionGetDouble(POSITION_SL);
       double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
@@ -703,7 +716,7 @@ void closeAllPositions(){
 }
   
 void closeBuyOrSell(int position){
-   if(hasPositionOpen()  && verifyMagicNumber()){
+   if(hasPositionOpen()  && verifyMagicNumber(position)){
       ulong ticket = PositionGetTicket(position);
       tradeLib.PositionClose(ticket);
       if(verifyResultTrade()){
@@ -712,8 +725,14 @@ void closeBuyOrSell(int position){
    }
 }
 
-bool verifyMagicNumber(){
-   ulong magicNumber = tradePosition.Magic();
+bool verifyMagicNumber(int position = 0){
+   ulong magicNumber;
+   if(position == 0 && hasPositionOpen()){
+      magicNumber = PositionGetInteger(POSITION_MAGIC);
+   }else{
+      magicNumber = tradePosition.Magic();
+   }
+   
    if(USE_MAGIC_NUMBER == OFF){
       return true;
    }else{
