@@ -210,7 +210,12 @@ void OnTick()
       }   
     }else{
       Print("Horario de proteção");
-      closeAllPositions();
+      if(hasPositionOpen()){
+         double profit = PositionGetDouble(POSITION_PROFIT);
+         if(profit >= 0){
+            closeAllPositions();
+         }
+      }
    }
 }
 
