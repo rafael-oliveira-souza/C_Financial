@@ -115,6 +115,7 @@ input string SCHEDULE_END_PROTECTION = "00:00";
 input ulong MAGIC_NUMBER = 3232131231231231;
 input POWER USE_MAGIC_NUMBER = ON;
 input int NUMBER_ROBOTS = 100;
+input int WAIT_CANDLES = 0;
 
 MqlRates candles[];
 datetime actualDay = 0;
@@ -195,13 +196,13 @@ void OnTick()
       if(copiedPrice == 3){
          double spread = candles[periodAval-1].spread;
          if(hasNewCandle()){
-            if(countCandles > 5){
+            if(countCandles >= WAIT_CANDLES){
+               Print("New Candle");
+               toNegociate(spread);
                waitNewCandle = false;
                countCandles = 0;
             }
             countCandles++;
-            Print("New Candle");
-            toNegociate(spread);
          }else{
             if(EVALUATION_BY_TICK == ON){
                moveAllPositions(spread);
