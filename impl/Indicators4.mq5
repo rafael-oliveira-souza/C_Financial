@@ -112,9 +112,10 @@ input string SCHEDULE_START_DEALS = "23:20";
 input string SCHEDULE_END_DEALS = "01:00";
 input string SCHEDULE_START_PROTECTION = "00:00";
 input string SCHEDULE_END_PROTECTION = "00:00";
-input ulong MAGIC_NUMBER = 444444444444;
+input ulong MAGIC_NUMBER = 3232131231231231;
 input POWER USE_MAGIC_NUMBER = ON;
 input int NUMBER_ROBOTS = 100;
+input int WAIT_CANDLES = 0;
 
 MqlRates candles[];
 datetime actualDay = 0;
@@ -122,8 +123,8 @@ bool negociationActive = false;
 MqlTick tick;                // variável para armazenar ticks 
 
 
-double averages[], CCI[], RSI[], RVI1[], RVI2[], STHO1[], STHO2[], valuePrice = 0;
-int teeth, jaw, lips, handleFractal, fractMedia, handleICCI, handleIRSI, handleIRVI, handleStho, handleFI, handleWeek, handleAverages[], countAverage = 0;
+double averages[], CCI5[], RVI15[], RVI25[], CCI[], RSI[], RVI1[], RVI2[], STHO1[], STHO2[], valuePrice = 0;
+int handleICCI, handleICCI5, handleIRVI5, handleIRSI, handleIRVI, handleStho, handleFI, handleWeek, handleAverages[], countAverage = 0;
 ORIENTATION orientMacro = MEDIUM;
 BordersOperation bordersFractal;
 int periodAval = 3, countRobots = 0, countCandles = 0;
@@ -134,23 +135,24 @@ ulong robots[];
 //+------------------------------------------------------------------+
 int OnInit()
   {
-      ArrayResize(handleAverages, 10);
       
       handleIRVI = iRVI(_Symbol,PERIOD_CURRENT,3);
       handleICCI = iCCI(_Symbol,PERIOD_CURRENT,14,PRICE_TYPICAL);
+      handleICCI5 = iCCI(_Symbol,PERIOD_M2,14,PRICE_TYPICAL);
       handleWeek = iMA(_Symbol,PERIOD_H1,1,0,MODE_SMA,PRICE_CLOSE);
       
       if(USE_AVERAGES== ON){
+         ArrayResize(handleAverages, 10);
          handleAverages[0] = iMA(_Symbol,PERIOD_CURRENT,5,0,MODE_SMA,PRICE_CLOSE);
          handleAverages[1] = iMA(_Symbol,PERIOD_CURRENT,10,0,MODE_SMA,PRICE_CLOSE);
-         handleAverages[2] = iMA(_Symbol,PERIOD_CURRENT,15,0,MODE_SMA,PRICE_CLOSE);
-         handleAverages[3] = iMA(_Symbol,PERIOD_CURRENT,20,0,MODE_SMA,PRICE_CLOSE);
-         handleAverages[4] = iMA(_Symbol,PERIOD_CURRENT,40,0,MODE_SMA,PRICE_CLOSE);
-         handleAverages[5] = iMA(_Symbol,PERIOD_CURRENT,60,0,MODE_SMA,PRICE_CLOSE);
+         handleAverages[2] = iMA(_Symbol,PERIOD_CURRENT,20,0,MODE_SMA,PRICE_CLOSE);
+         handleAverages[3] = iMA(_Symbol,PERIOD_CURRENT,40,0,MODE_SMA,PRICE_CLOSE);
+         handleAverages[4] = iMA(_Symbol,PERIOD_CURRENT,60,0,MODE_SMA,PRICE_CLOSE);
+         handleAverages[5] = iMA(_Symbol,PERIOD_CURRENT,80,0,MODE_SMA,PRICE_CLOSE);
          handleAverages[6] = iMA(_Symbol,PERIOD_CURRENT,100,0,MODE_SMA,PRICE_CLOSE);
          handleAverages[7] = iMA(_Symbol,PERIOD_CURRENT,200,0,MODE_SMA,PRICE_CLOSE);
-         handleAverages[8] = iMA(_Symbol,PERIOD_CURRENT,400,0,MODE_SMA,PRICE_CLOSE);
-         handleAverages[9] = iMA(_Symbol,PERIOD_CURRENT,600,0,MODE_SMA,PRICE_CLOSE);
+         handleAverages[8] = iMA(_Symbol,PERIOD_CURRENT,300,0,MODE_SMA,PRICE_CLOSE);
+         handleAverages[9] = iMA(_Symbol,PERIOD_CURRENT,400,0,MODE_SMA,PRICE_CLOSE);
       }
       
       if(USE_STHOCASTIC == ON){
@@ -194,13 +196,13 @@ void OnTick()
       if(copiedPrice == 3){
          double spread = candles[periodAval-1].spread;
          if(hasNewCandle()){
-            if(countCandles > 5){
+            if(countCandles >= WAIT_CANDLES){
+               Print("New Candle");
+               toNegociate(spread);
                waitNewCandle = false;
                countCandles = 0;
             }
             countCandles++;
-            Print("New Candle");
-            toNegociate(spread);
          }else{
             if(EVALUATION_BY_TICK == ON){
                moveAllPositions(spread);
@@ -230,8 +232,8 @@ void toNegociate(double spread){
       CopyBuffer(handleIRVI,1,0,periodAval,RVI2) == periodAval){
       ORIENTATION orientCCI, orientRVI;
       
-      orientCCI = verifyCCI();
-      orientRVI = verifyRVI();
+      orientCCI = verifyCCI(CCI[periodAval-1]);
+      orientRVI = verifyRVI(RVI1[periodAval-1], RVI2[periodAval-1]);
       Print("CCI: " + verifyPeriod(orientCCI));
       Print("RVI: " + verifyPeriod(orientRVI));
       if( spread <= ACCEPTABLE_SPREAD){
@@ -275,7 +277,7 @@ void realizeDealIndicators(ORIENTATION orientCCI){
 
 void realizeDealsRSI(ORIENTATION orientCCI){    
    if(CopyBuffer(handleIRSI,0,0,periodAval,RSI) == periodAval){
-      ORIENTATION orientRSI = verifyRSI();
+      ORIENTATION orientRSI = verifyRSI(RSI[periodAval-1], RSI[0]);
       Print("RSI: " + verifyPeriod(orientRSI));
       if(orientCCI == orientRSI){
          if(USE_STHOCASTIC == ON ){
@@ -289,7 +291,7 @@ void realizeDealsRSI(ORIENTATION orientCCI){
 
 void realizeDealsSthocastic(ORIENTATION orientCCI){
    if( CopyBuffer(handleStho,0,0,periodAval,STHO1) == periodAval && CopyBuffer(handleStho,1,0,periodAval,STHO2) == periodAval){
-      ORIENTATION orientSTHO = verifySTHO(); 
+      ORIENTATION orientSTHO = verifySTHO(STHO1[periodAval-1], STHO2[periodAval-1]); 
       Print("STHOCASTIC: " + verifyPeriod(orientSTHO));
       if(orientCCI == orientSTHO ){
          verifyToBuyOrToSell(orientCCI, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
@@ -324,19 +326,24 @@ void executeOrderByRobots(ORIENTATION orient, double volume, double stop, double
             }
          }
          
+          ORIENTATION orientCCI5 = orient;
+          if(CopyBuffer(handleICCI5,0,0,periodAval,CCI5) == periodAval){
+               orientCCI5 = verifyCCI(CCI5[periodAval-1]);
+          }
+         
          if(USE_HEIKEN_ASHI == ON){
             ORIENTATION orientHeiken = verifyHeikenAshi(PERIOD);
-            if(up >= 7 && orient == UP && orientHeiken != orient){
+            if(up >= 7 && orient == UP && orientHeiken != orient && orientCCI5 == orient){
                volume = volume * MULTIPLIER_VOLUME;
             }
-            else if(down >= 7 && orient == DOWN && orientHeiken != orient){
+            else if(down >= 7 && orient == DOWN && orientHeiken != orient && orientCCI5 == orient){
                volume = volume * MULTIPLIER_VOLUME;
             }
          }else{
-            if(up >= 7 && orient == UP){
+            if(up >= 7 && orient == UP && orientCCI5 == orient ){
                volume = volume * MULTIPLIER_VOLUME;
             }
-            else if(down >= 7 && orient == DOWN){
+            else if(down >= 7 && orient == DOWN && orientCCI5 == orient){
                volume = volume * MULTIPLIER_VOLUME;
             }
          }
@@ -499,21 +506,21 @@ ORIENTATION verifyHeikenAshi(int period){
 
 //+------------------------------------------------------------------+
 
-ORIENTATION verifyRVI(){
-   if(RVI1[periodAval-1] < RVI2[periodAval-1] && RVI2[periodAval-1] < 0){
+ORIENTATION verifyRVI(double rvi1, double rvi2){
+   if(rvi1 < rvi2 && rvi2 < 0){
       //Print("Trend DOWN");
       return DOWN;
    }
-   if(RVI1[periodAval-1] > RVI2[periodAval-1] && RVI1[periodAval-1] > 0){
+   if(rvi1 > rvi2 && rvi1 > 0){
       //Print("Trend UP");
       return UP;
    }
    
-   if(RVI1[periodAval-1] < RVI2[periodAval-1] && RVI1[periodAval-1] > 0){
+   if(rvi1 < rvi2 && rvi1 > 0){
       //Print("CORRECTION DOWN");
       return DOWN;
    }
-   if(RVI1[periodAval-1] > RVI2[periodAval-1] && RVI2[periodAval-1] < 0){
+   if(rvi1 > rvi2 && rvi2 < 0){
       //Print("CORRECTION UP");
       return UP;
    }
@@ -521,33 +528,33 @@ ORIENTATION verifyRVI(){
    return MEDIUM;
 }
 
-ORIENTATION verifySTHO(){
-   if(STHO1[periodAval-1] >= 80 && STHO2[periodAval-1] >= 70){
+ORIENTATION verifySTHO(double stho1, double stho2){
+   if(stho1 >= 80 && stho2 >= 70){
       return DOWN;
    }
-   if(STHO1[periodAval-1] <= 20 && STHO2[periodAval-1] <= 30){
+   if(stho1 <= 20 && stho2 <= 30){
       return UP;
    }
 
    return MEDIUM;
 }
 
-ORIENTATION verifyRSI(){
-   if(RSI[periodAval-1] >= 70 && RSI[0] < 70){
+ORIENTATION verifyRSI(double rsi, double rsi0){
+   if(rsi >= 70 && rsi0 < 70){
       return DOWN;
    }
-   if(RSI[periodAval-1] <= 30 && RSI[0] > 30){
+   if(rsi <= 30 && rsi0 > 30){
       return UP;
    }
 
    return MEDIUM;
 }
 
-ORIENTATION verifyCCI(){
-   if(CCI[periodAval-1] >= 100){
+ORIENTATION verifyCCI(double valCCI){
+   if(valCCI >= 100){
       return DOWN;
    }
-   if(CCI[periodAval-1] <= -100){
+   if(valCCI <= -100){
       return UP;
    }
 
