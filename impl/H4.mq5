@@ -92,6 +92,7 @@ struct PeriodProtectionTime {
    bool instantiated;
 };
 
+input POWER  EXPONENTIAL_ROBOTS = ON;
 input POWER  ACTIVE_MOVE_TAKE = ON;
 input POWER  ACTIVE_MOVE_STOP = ON;
 input double PERCENT_MOVE = 30;
@@ -99,13 +100,14 @@ input double PONTUATION_MOVE_STOP = 800;
 input double ACTIVE_VOLUME = 0.01;
 input string CLOSING_TIME = "23:00";
 input ulong MAGIC_NUMBER = 3232131231231231;
-input int NUMBER_ROBOTS = 50;
+input int NUMBER_ROBOTS = 5;
 input int COUNT_TICKS = 40;
 
 POWER USE_MAGIC_NUMBER = ON;
 double PONTUATION_ESTIMATE = 500;
 double TAKE_PROFIT = 2000;
 double STOP_LOSS = 1000;
+int NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
 
 MqlRates candles[];
 datetime actualDay = 0;
@@ -122,21 +124,19 @@ double averages[], averages8[], averages20[], averages80[], averages200[], MACD[
 double upperBand[], middleBand[], lowerBand[], upperBand5[], middleBand5[], lowerBand5[], RVI1[], RVI2[], RSI[];
 int handleaverages[4], handleBand[2] ,handleCCI[2], handleVol[2], handleMACD[2], handleIRVI, handleFI, handleIRSI;
 
+int BALANCE_ACTIVE = 0;
+
 int OnInit(){
       handleaverages[0] = iMA(_Symbol,PERIOD_H4, 8, 0, MODE_SMA, PRICE_CLOSE);
       handleaverages[1] = iMA(_Symbol,PERIOD_H4, 20, 0, MODE_SMA, PRICE_CLOSE);
       handleaverages[2] = iMA(_Symbol,PERIOD_H4, 80, 0, MODE_SMA, PRICE_CLOSE);
       handleaverages[3] = iMA(_Symbol,PERIOD_H4, 200, 0, MODE_SMA, PRICE_CLOSE);
       handleVol[0] = iVolumes(_Symbol,PERIOD_H4,VOLUME_TICK);
-      
+      BALANCE_ACTIVE = AccountInfoDouble(ACCOUNT_BALANCE);
      // handleIRVI = iRVI(_Symbol,PERIOD_H4,3);
      // handleCCI[0] = iCCI(_Symbol,PERIOD_H4,14,PRICE_TYPICAL);
      // handleFI = iForce(_Symbol,PERIOD_H4,14,MODE_SMA,VOLUME_TICK);
-      
-      ArrayResize(robots, NUMBER_ROBOTS + 2);
-      for(int i = 0; i < NUMBER_ROBOTS; i++)  {
-         robots[i] = MAGIC_NUMBER + i; 
-      }
+      updateNumberRobots();
 //---
    return(INIT_SUCCEEDED);
  }
@@ -161,6 +161,7 @@ void OnTick()
       double spread = candles[periodAval-1].spread;
       if(hasNewCandle()){
          waitNewCandle = false;
+          updateNumberRobots();
       }else{
          if(countTicks > COUNT_TICKS){
            //if(!waitNewCandle){
@@ -171,6 +172,27 @@ void OnTick()
          }
          countTicks++;
       }
+   }
+}
+
+void updateNumberRobots(){
+   if(EXPONENTIAL_ROBOTS == ON){  
+      double profit = AccountInfoDouble(ACCOUNT_PROFIT);
+      if(profit > BALANCE_ACTIVE * ACTIVE_VOLUME){
+         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE + 5;
+         BALANCE_ACTIVE = AccountInfoDouble(ACCOUNT_BALANCE);
+         Print("Adicionando novos robos: " + NUMBER_ROBOTS_ACTIVE);
+      }else  if(profit <  -(BALANCE_ACTIVE * ACTIVE_VOLUME)){
+         NUMBER_ROBOTS_ACTIVE = (NUMBER_ROBOTS_ACTIVE - 5) > NUMBER_ROBOTS ? (NUMBER_ROBOTS_ACTIVE - 2) : NUMBER_ROBOTS;
+         BALANCE_ACTIVE = AccountInfoDouble(ACCOUNT_BALANCE);
+         Print("Removendo robos: " + NUMBER_ROBOTS_ACTIVE);
+      }
+   }else{
+      NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
+   }
+   ArrayResize(robots, NUMBER_ROBOTS_ACTIVE + 2);
+   for(int i = 0; i < NUMBER_ROBOTS_ACTIVE; i++)  {
+      robots[i] = MAGIC_NUMBER + i; 
    }
 }
 
@@ -306,7 +328,7 @@ void closeAllPositionsByType(ENUM_POSITION_TYPE type, double stop, double takePr
 }
 
 void executeOrderByRobots(ORIENTATION orient, double volume, double stop, double take){
-  if(countRobots < NUMBER_ROBOTS){
+  if(countRobots < NUMBER_ROBOTS_ACTIVE){
    if(!hasPositionOpen((int)robots[countRobots])){
       if(countRobots > 1){
         stop = (stop / countRobots) > PONTUATION_MOVE_STOP*2 ? (stop / countRobots) : PONTUATION_MOVE_STOP*2;
