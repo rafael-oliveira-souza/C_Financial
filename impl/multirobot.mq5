@@ -96,15 +96,15 @@ struct PeriodProtectionTime {
 input POWER  EXPONENTIAL_ROBOTS = ON;
 input POWER  ACTIVE_MOVE_TAKE = ON;
 input POWER  ACTIVE_MOVE_STOP = ON;
-input double PERCENT_MOVE = 40;
-input double PONTUATION_MOVE_STOP = 800;
+input double PERCENT_MOVE = 70;
+input double PONTUATION_MOVE_STOP = 400;
 input double ACTIVE_VOLUME = 0.01;
 input string CLOSING_TIME = "23:00";
 input ulong MAGIC_NUMBER = 3232131231231231;
-input int NUMBER_ROBOTS = 2;
-input int NUMBER_MAX_ROBOTS = 300;
-input int COUNT_TICKS = 40;
-input double TAKE_PROFIT = 100;
+input int NUMBER_ROBOTS = 5;
+input int NUMBER_MAX_ROBOTS = 600;
+input int COUNT_TICKS = 90;
+input double TAKE_PROFIT = 40;
 input double STOP_LOSS = 100;
 
 POWER USE_MAGIC_NUMBER = ON;
@@ -240,8 +240,8 @@ void updateNumberRobots(){
             Print("Maximo de robôs permitidos ");
          }
       }else  if(profit <  -(BALANCE_ACTIVE * ACTIVE_VOLUME)){
-         //NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
-         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS > NUMBER_ROBOTS ? NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS : NUMBER_ROBOTS;
+         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
+         //NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS > NUMBER_ROBOTS ? NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS : NUMBER_ROBOTS;
          BALANCE_ACTIVE = AccountInfoDouble(ACCOUNT_BALANCE);
          Print("Removendo robos: " + IntegerToString(NUMBER_ROBOTS_ACTIVE));
       }
@@ -405,7 +405,7 @@ ORIENTATION verifyForceIndex(){
 
 
 void  decideToCreateOrDeleteRobots(){
-   int countBuy = 0, countSell = 0;
+   int countBuy = 0, countSell = 0, countLossSell = 0, countLossBuy = 0;
    int pos = PositionsTotal() - 1;
    double  average[];
    for(int position = pos; position >= 0; position--)  {
@@ -438,9 +438,11 @@ void  decideToCreateOrDeleteRobots(){
              else if(profit < 0){
                 if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
                   countBuy--;
+                  countLossBuy++;
                 }
                 else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
                   countSell--;
+                  countLossSell++;
                }
             }/* */
          }
@@ -448,20 +450,31 @@ void  decideToCreateOrDeleteRobots(){
    }
             
    double profit2 =  AccountInfoDouble(ACCOUNT_PROFIT);
-   if(countBuy >= 0 && countSell >= 0 && profit2 > 0){
-      ORIENTATION orientFI = verifyForceIndex();
-      ORIENTATION orientAverages = verifyOrientationAverage(candles[periodAval-1].close);
-      if(countBuy > countSell){
-         //if(orientAverages != DOWN && orientFI != DOWN ){
-            bestOrientation = UP;
-            executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
-         //}
+   if(profit2 > 0){
+      if(countBuy >= 0 && countSell >= 0){
+         ORIENTATION orientFI = verifyForceIndex();
+         ORIENTATION orientAverages = verifyOrientationAverage(candles[periodAval-1].close);
+         if(countBuy > countSell){
+            if(orientAverages != DOWN && orientFI != DOWN ){
+               bestOrientation = UP;
+               executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+            }
+         }
+         else if(countBuy < countSell){
+            if(orientAverages != UP && orientFI != UP){
+               bestOrientation = DOWN;
+               executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+           }
+         }
       }
-      else if(countBuy < countSell){
-        // if(orientAverages != UP && orientFI != UP){
-            bestOrientation = DOWN;
-            executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
-        // }
+   }else{
+      if((countRobots > 10 * NUMBER_ROBOTS) && (MathAbs(profit2 / countRobots) >= 100)){
+         if(countLossBuy > countLossSell){
+            closeAllPositionsByType(POSITION_TYPE_BUY);
+         }
+         if(countLossSell > countLossBuy){
+              closeAllPositionsByType(POSITION_TYPE_SELL);
+         }
       }
    }
 }
