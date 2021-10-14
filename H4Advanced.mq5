@@ -7,6 +7,7 @@
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
 
+
 CPositionInfo  tradePosition;                   // trade position object
 CTrade tradeLib;
 
@@ -117,19 +118,68 @@ bool negociationActive = false;
 MqlTick tick;                // variável para armazenar ticks 
 
 ORIENTATION orientMacro = MEDIUM;
-int periodAval = 4, countRobots = 0, countTicks = 0, countCandles = 0;
+int periodAval = 4, countRobots = 0, countTicks = COUNT_TICKS, countCandles = 0;
 bool waitNewCandle = false;
 ulong robots[];
 
 MqlRates candleMacro;
 double averages[], averages8[], averages20[], averages80[], averages200[], MACD[], MACD5[], CCI[], FI[], VOL[], pointsMacro = 0;
 double upperBand[], middleBand[], lowerBand[], upperBand5[], middleBand5[], lowerBand5[], RVI1[], RVI2[], RSI[];
-int handleaverages[5], handleBand[2] ,handleCCI[2], handleVol[2], handleMACD[2], handleIRVI, handleFI, handleIRSI;
+int handleaverages[5], handleBand[2] ,handleICCI, handleVol[2], handleMACD[2], handleIRVI, handleFI, handleIRSI;
 
-int BALANCE_ACTIVE = 0, MULTIPLIER_ROBOTS = 1, INITIAL_BALANCE;
+int MULTIPLIER_ROBOTS = 1;
+double BALANCE_ACTIVE = 0, INITIAL_BALANCE;
 ORIENTATION bestOrientation = MEDIUM;
 
+void OnChartEvent(const int id,
+                  const long &lparam,
+                  const double &dparam,
+                  const string &sparam){
+//---
+   // Fechar negociacões
+   if(id == CHARTEVENT_OBJECT_CLICK){
+      if(sparam == "btnCloseBuy"){
+         closeAllPositionsByType(POSITION_TYPE_BUY);
+      }
+      if(sparam == "btnCloseSell"){
+         closeAllPositionsByType(POSITION_TYPE_SELL);
+      }
+      
+      if(sparam == "btnCloseAll"){
+         closeAll();
+      }
+      if(sparam == "btnMoveStop"){
+         int pos = PositionsTotal() - 1;
+         for(int i = pos; i >= 0; i--)  {
+            activeStopMovelPerPoints(TAKE_PROFIT, i);
+         }
+      }
+      if(sparam == "btnBuy"){
+         ulong magic = MAGIC_NUMBER + 6000;
+         for(int i = 0; i < NUMBER_ROBOTS; i++){
+            magic = magic + i;
+            realizeDeals(BUY, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
+         }
+      }
+      if(sparam == "btnSell"){
+         ulong magic = MAGIC_NUMBER + 6000;
+         for(int i = 0; i < NUMBER_ROBOTS; i++){
+            magic = magic + i;
+            realizeDeals(SELL, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
+         }
+      }
+   }
+}
+
 int OnInit(){
+      createButton("btnCloseBuy", 20, 400, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Fechar Compras", clrWhite, clrRed, clrRed, false);
+      createButton("btnCloseSell", 230, 400, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Fechar Vendas", clrWhite, clrRed, clrRed, false);
+      createButton("btnCloseAll", 440, 400, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Fechar Negociacoes", clrWhite, clrRed, clrRed, false);
+      createButton("btnMoveStop", 20, 350, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Mover Stops", clrWhite, clrBlue, clrBlue, false);
+      createButton("btnBuy", 230, 350, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Criar " + IntegerToString(NUMBER_ROBOTS) +" Robôs de Compra", clrWhite, clrBlue, clrBlue, false);
+      createButton("btnSell", 440, 350, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Criar " + IntegerToString(NUMBER_ROBOTS) +" Robôs de Venda", clrWhite, clrBlue, clrBlue, false);
+      
+      handleICCI = iCCI(_Symbol,PERIOD_CURRENT,14,PRICE_TYPICAL);
       handleaverages[0] = iMA(_Symbol,PERIOD_H4, 8, 0, MODE_SMA, PRICE_CLOSE);
       handleaverages[1] = iMA(_Symbol,PERIOD_H4, 20, 0, MODE_SMA, PRICE_CLOSE);
       handleaverages[2] = iMA(_Symbol,PERIOD_H4, 80, 0, MODE_SMA, PRICE_CLOSE);
@@ -168,7 +218,7 @@ void OnTick()
          countCandles--;
       }else{
          Print("Robo executando");
-         if(countTicks > COUNT_TICKS){
+         if(countTicks >= COUNT_TICKS){
              updateNumberRobots();
              toNegociate(spread);
              
@@ -188,18 +238,17 @@ void updateNumberRobots(){
       double profit = AccountInfoDouble(ACCOUNT_PROFIT);
       if(profit > BALANCE_ACTIVE * ACTIVE_VOLUME){
          if(NUMBER_MAX_ROBOTS > NUMBER_ROBOTS_ACTIVE){
-            NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE + NUMBER_ROBOTS * MULTIPLIER_ROBOTS;
+            NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE + NUMBER_ROBOTS ;
             BALANCE_ACTIVE = AccountInfoDouble(ACCOUNT_BALANCE);
-            Print("Adicionando novos robos: " + NUMBER_ROBOTS_ACTIVE);
+            Print("Adicionando novos robos: " + IntegerToString(NUMBER_ROBOTS_ACTIVE));
          }else{
             Print("Maximo de robôs permitidos ");
          }
       }else  if(profit <  -(BALANCE_ACTIVE * ACTIVE_VOLUME)){
-            NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
-         //NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
-        // NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS > NUMBER_ROBOTS ? NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS : NUMBER_ROBOTS;
+         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
+         //NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS > NUMBER_ROBOTS ? NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS : NUMBER_ROBOTS;
          BALANCE_ACTIVE = AccountInfoDouble(ACCOUNT_BALANCE);
-         Print("Removendo robos: " + NUMBER_ROBOTS_ACTIVE);
+         Print("Removendo robos: " + IntegerToString(NUMBER_ROBOTS_ACTIVE));
       }
    }else{
       NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
@@ -220,6 +269,15 @@ void toNegociate(double spread){
    if( CopyBuffer(handleVol[0], 0, 0, 5, VOL) == 5){
       MqlRates actualCandle = candles[periodAval-1];
       MqlRates lastCandle = candles[periodAval-2];
+      ORIENTATION orientCCI = verifyCCI();
+      ORIENTATION orientFI = verifyForceIndex();
+      
+      Comment("Total de robôs: ", countRobots, 
+            " Lucro Atual: ", DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2),
+            " Melhor Orientação: ", (bestOrientation == UP ? "BUY" : "DOWN"),
+            " Orientação CCI: ", (orientCCI == UP ? "BUY" : "DOWN"),
+            " Orientação FI: ", (orientFI == UP ? "BUY" : "DOWN"));
+      
      if(VOL[0] <= VOL[2] && VOL[1] <= VOL[3] && VOL[2] <= VOL[3]){
          Print("Alerta de possivel negociação executando");
          ORIENTATION orientCandle1 = verifyValidCandle(candles[periodAval-4]);
@@ -234,7 +292,7 @@ void toNegociate(double spread){
            double stopLoss = STOP_LOSS;     
            double takeProfit = calcPoints(candles[periodAval-4].open, actualCandle.close);
            if(orientCandle1 == orientCandle2 && orientCandle2 == orientCandle3 && orientCandle3 != orientLastCandle){  
-                waitNewCandle = true;
+              
                
               if(orientLastCandle == UP){
                   stopLoss = calcPoints(actualCandle.close, lastCandle.low);
@@ -244,18 +302,25 @@ void toNegociate(double spread){
                   stopLoss = calcPoints(actualCandle.close, lastCandle.high);
                }
                
-               if(IN_FAVOR == ON){
-                  executeOrderByRobots(orientLastCandle, ACTIVE_VOLUME, stopLoss, takeProfit);
-               }else{
-                  if(orientLastCandle == UP){
-                     executeOrderByRobots(DOWN, ACTIVE_VOLUME, stopLoss, takeProfit);
+               if(!waitNewCandle){
+                  if(IN_FAVOR == ON){
+                     if(orientCCI == orientLastCandle && orientFI == orientLastCandle){
+                        executeOrderByRobots(orientLastCandle, ACTIVE_VOLUME, stopLoss, takeProfit);
+                          waitNewCandle = true;
+                     }
                   }else{
-                     executeOrderByRobots(UP, ACTIVE_VOLUME, stopLoss, takeProfit);
+                     if(orientLastCandle == UP && orientCCI == DOWN){
+                        executeOrderByRobots(DOWN, ACTIVE_VOLUME, stopLoss, takeProfit);
+                          waitNewCandle = true;
+                     }if(orientLastCandle == DOWN && orientCCI == UP){
+                        executeOrderByRobots(UP, ACTIVE_VOLUME, stopLoss, takeProfit); 
+                         waitNewCandle = true;
+                     }
                   }
                }
                
            }
-        /*  else{
+        /* else{
                //waitNewCandle = true; 
             if(orientLastCandle == UP){
                   stopLoss = calcPoints(actualCandle.close, lastCandle.low);
@@ -283,7 +348,7 @@ void toNegociate(double spread){
                      executeOrderByRobots(DOWN, ACTIVE_VOLUME, stopLoss, takeProfit);
                   }
                }  
-           }  */
+           }   */
          }
       }
    }
@@ -332,16 +397,14 @@ string verifyPeriod(ORIENTATION orient){
    return "MEDIUM";
 }
 
-void closeAllPositionsByType(ENUM_POSITION_TYPE type, double stop, double takeProfit){
+void closeAllPositionsByType(ENUM_POSITION_TYPE type){
    int pos = PositionsTotal() - 1;
    for(int i = pos; i >= 0; i--)  {
       if(hasPositionOpen(i)){
          ulong ticket = PositionGetTicket(i);
          PositionSelectByTicket(ticket);
          ulong magicNumber = PositionGetInteger(POSITION_MAGIC);
-         double profit = PositionGetDouble(POSITION_PROFIT);
-         double pointsProfit =  MathAbs(profit / ACTIVE_VOLUME);
-         if(verifyMagicNumber(i, magicNumber)){
+         if(verifyMagicNumber(i, magicNumber) && PositionGetInteger(POSITION_TYPE) == type){
                closeBuyOrSell(i);
          }
       }
@@ -352,10 +415,9 @@ void executeOrderByRobots(ORIENTATION orient, double volume, double stop, double
   if(countRobots < NUMBER_ROBOTS_ACTIVE){
    if(!hasPositionOpen((int)robots[countRobots])){
       if(countRobots > 1){
-        stop = (stop / countRobots) > PONTUATION_MOVE_STOP*2 ? (stop / countRobots) : PONTUATION_MOVE_STOP*2;
-        // take = (take * countRobots);
+        //stop = (stop / countRobots) > STOP_LOSS ? (stop / countRobots) : STOP_LOSS;
+       // take =TAKE_PROFIT;
       }
-      
       if(bestOrientation == MEDIUM || bestOrientation == orient){
          toBuyOrToSell(orient, volume, (stop), (take), robots[countRobots]);
          countRobots++;
@@ -375,7 +437,7 @@ void moveAllPositions(double spread){
             activeStopMovelPerPoints(PONTUATION_MOVE_STOP+spread, i);
          }
          if(ACTIVE_MOVE_TAKE == ON){
-            moveTakeProfit( i);
+            moveTakeProfit(i);
          }
       }
    }
@@ -403,9 +465,9 @@ ORIENTATION verifyForceIndex(){
          forceValue[4] = NormalizeDouble(forceIArray[handleFI-5], _Digits);
          fMedia =  forceValue[0] + forceValue[1] + forceValue[2] + forceValue[3] + forceValue[4];
          
-         if(fMedia >= 1000 ){
+         if(fMedia > 0 && fMedia < 1000 ){
             return UP;
-         }else if(fMedia <= -1000 ){
+         }else if(fMedia < 0 && fMedia > -1000 ){
             return DOWN;
          }
       }
@@ -426,12 +488,20 @@ ORIENTATION verifyRSI(double rsi, double rsi0){
    return MEDIUM;
 }
 
-ORIENTATION verifyCCI(double valCCI){
-   if(valCCI >= 100){
-      return DOWN;
-   }
-   if(valCCI <= -100){
-      return UP;
+ORIENTATION verifyCCI(){
+   if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval){
+      if(CCI[periodAval-1] > 0 && CCI[periodAval-1] < 99){
+         return UP;
+      }
+      if(CCI[periodAval-1] < 0 && CCI[periodAval-1] > -99){
+         return DOWN;
+      }
+      if(CCI[periodAval-1] >= 100){
+         return DOWN;
+      }
+      if(CCI[periodAval-1] <= -100){
+         return UP;
+      }
    }
 
    return MEDIUM;
@@ -459,36 +529,44 @@ void  decideToCreateOrDeleteRobots(){
             newTpPrice = tpPrice;
             
             if(profit > 0){
+              if(pointsProfit >= pointsTake * 0.2 &&  pointsProfit <= pointsTake * 0.6){
                 if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
                   countBuy++;
                 }
                 else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
                   countSell++;
                }
+             }
            }
-           else if(profit < 0){
+             else if(profit < 0){
                 if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
-                  countBuy++;
+                  countBuy--;
                 }
                 else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
-                  countSell++;
+                  countSell--;
                }
-            }
+              // if(pointsProfit >= pointsSL * 0.3){
+                //  closeBuyOrSell(position);
+              // }
+            }/* */
          }
       }
    }
             
-   ORIENTATION orientAverages = verifyOrientationAverage(candles[periodAval-1].close);
-   if(countBuy > countSell){
-      bestOrientation = BUY;
-      if(orientAverages != DOWN ){
-         executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+   double profit2 =  AccountInfoDouble(ACCOUNT_PROFIT);
+   if(countBuy >= 0 && countSell >= 0 && profit2 > 0){
+      ORIENTATION orientAverages = verifyOrientationAverage(candles[periodAval-1].close);
+      if(countBuy > countSell){
+         if(orientAverages != DOWN ){
+            bestOrientation = UP;
+            executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+         }
       }
-   }
-   else if(countBuy < countSell){
-      bestOrientation = DOWN;
-      if(orientAverages != UP ){
-         executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+      else if(countBuy < countSell){
+         if(orientAverages != UP ){
+            bestOrientation = DOWN;
+            executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+         }
       }
    }
 }
@@ -512,19 +590,21 @@ void  moveTakeProfit( int position = 0){
             newTpPrice = tpPrice;
             
             if(profit > 0){
-              if(pointsProfit >= pointsTake * 0.8 ){
+              newSlPrice = slPrice;
+              if(pointsProfit >= pointsTake * 0.60 ){
+                  double mov =  NormalizeDouble((pointsTake * PONTUATION_MOVE_STOP / 100 * _Point), _Digits);
                   if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
-                     newTpPrice = NormalizeDouble(tpPrice + (pointsTake * PERCENT_MOVE * _Point), _Digits);
-                     newSlPrice = NormalizeDouble(tpPrice - (pointsTake * PERCENT_MOVE * _Point), _Digits);
+                     newTpPrice = (tpPrice + mov);
+                     newSlPrice = (tpPrice + mov);
                    //  slPrice = slPrice > entryPrice ? slPrice : entryPrice;
                   }
                   else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
-                     newTpPrice = NormalizeDouble(tpPrice - (pointsTake   * PERCENT_MOVE *_Point), _Digits);
-                     newSlPrice = NormalizeDouble(tpPrice + (pointsTake * PERCENT_MOVE * _Point), _Digits);
+                     newTpPrice = (tpPrice - mov);
+                     newSlPrice = (tpPrice - mov);
                     // slPrice = slPrice < entryPrice ? slPrice : entryPrice;
                   }
                   
-                  tradeLib.PositionModify(ticket, newSlPrice, newTpPrice);
+                  tradeLib.PositionModify(ticket, slPrice, newTpPrice);
                   if(verifyResultTrade()){
                      Print("Take movido");
                   }
@@ -552,13 +632,14 @@ void  activeStopMovelPerPoints(double points, int position = 0){
          newSlPrice = slPrice;
          points = points < pointsTake ? points : pointsTake;
          
+         double mov = (points * PERCENT_MOVE / 100 * _Point);
          if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
             //tpPrice = NormalizeDouble((tpPrice + (points * _Point)), _Digits);
             if(slPrice >= entryPrice ){
                entryPoints = calcPoints(slPrice, currentPrice);
-               newSlPrice = NormalizeDouble((slPrice + (points * PERCENT_MOVE / 100 * _Point)), _Digits);
+               newSlPrice = NormalizeDouble((slPrice + mov), _Digits);
                modify = true;
-            }else if(currentPrice > entryPrice+ (points * PERCENT_MOVE / 100 * _Point)){
+            }else if(currentPrice > entryPrice+ mov){
                entryPoints = calcPoints(entryPrice, currentPrice);
                newSlPrice = entryPrice;
                modify = true;
@@ -567,9 +648,9 @@ void  activeStopMovelPerPoints(double points, int position = 0){
           //  tpPrice = NormalizeDouble((tpPrice - (points * _Point)), _Digits);
             if(slPrice <= entryPrice ){
                entryPoints = calcPoints(slPrice, currentPrice);
-               newSlPrice = NormalizeDouble((slPrice - (points * PERCENT_MOVE / 100 * _Point)), _Digits);
+               newSlPrice = NormalizeDouble((slPrice - mov), _Digits);
                modify = true;
-            }else if(currentPrice < entryPrice- (points * PERCENT_MOVE / 100 * _Point)){
+            }else if(currentPrice < entryPrice- mov){
                entryPoints = calcPoints(entryPrice, currentPrice);
                newSlPrice = entryPrice;
                modify = true;
@@ -849,6 +930,20 @@ bool isNewDay(datetime startedDatetimeRobot){
       return true;
    }else{
       return false;
+   }
+}
+
+void closeAll(){
+   int pos = PositionsTotal() - 1;
+   for(int i = pos; i >= 0; i--)  {
+      if(hasPositionOpen(i)){
+         ulong ticket = PositionGetTicket(i);
+         PositionSelectByTicket(ticket);
+         ulong magicNumber = PositionGetInteger(POSITION_MAGIC);
+         if(verifyMagicNumber(i, magicNumber)){
+               closeBuyOrSell(i);
+         }
+      }
    }
 }
 
