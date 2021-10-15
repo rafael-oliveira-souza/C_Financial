@@ -93,6 +93,7 @@ struct PeriodProtectionTime {
    bool instantiated;
 };
 
+input POWER  CONDITIONAL_EXCLUSION = OFF;
 input POWER  EXPONENTIAL_ROBOTS = ON;
 input POWER  ACTIVE_MOVE_TAKE = ON;
 input POWER  ACTIVE_MOVE_STOP = ON;
@@ -103,10 +104,11 @@ input string CLOSING_TIME = "23:00";
 input ulong MAGIC_NUMBER = 3232131231231231;
 input int NUMBER_ROBOTS = 5;
 input int NUMBER_MAX_ROBOTS = 600;
-input int COUNT_TICKS = 90;
+input int COUNT_TICKS = 120;
 input double TAKE_PROFIT = 40;
-input double STOP_LOSS = 100;
+input double STOP_LOSS = 500;
 
+POWER  LOCK_IN_LOSS = OFF;
 POWER USE_MAGIC_NUMBER = ON;
 double PONTUATION_ESTIMATE = 500;
 int NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
@@ -129,6 +131,7 @@ int handleaverages[10], handleBand[2] ,handleICCI, handleVol, handleMACD[2], han
 int MULTIPLIER_ROBOTS = 1;
 double BALANCE_ACTIVE = 0, INITIAL_BALANCE;
 ORIENTATION bestOrientation = MEDIUM;
+POWER lockBuy = OFF, lockSell = OFF;
 
 void OnChartEvent(const int id,
                   const long &lparam,
@@ -167,6 +170,20 @@ void OnChartEvent(const int id,
             realizeDeals(SELL, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
          }
       }
+      if(sparam == "btnLockBuy"){
+         if(lockBuy == ON){
+            lockBuy = OFF;
+         }else{
+            lockBuy = ON;
+         }
+      }
+      if(sparam == "btnLockSell"){
+         if(lockSell == ON){
+            lockSell = OFF;
+         }else{
+            lockSell = ON;
+         }
+      }
    }
 }
 
@@ -177,6 +194,8 @@ int OnInit(){
       createButton("btnMoveStop", 20, 350, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Mover Stops", clrWhite, clrBlue, clrBlue, false);
       createButton("btnBuy", 230, 350, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Criar " + IntegerToString(NUMBER_ROBOTS) +" Robôs de Compra", clrWhite, clrBlue, clrBlue, false);
       createButton("btnSell", 440, 350, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Criar " + IntegerToString(NUMBER_ROBOTS) +" Robôs de Venda", clrWhite, clrBlue, clrBlue, false);
+      createButton("btnLockBuy", 120, 300, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Travar Comprar", clrWhite, clrBlue, clrBlue, false);
+      createButton("btnLockSell", 340, 300, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Travar Venda", clrWhite, clrBlue, clrBlue, false);
       
       handleFI = iForce(_Symbol,PERIOD_H4,14,MODE_SMA,VOLUME_TICK);
       handleaverages[0] = iMA(_Symbol,PERIOD_H4, 8, 0, MODE_SMA, PRICE_CLOSE);
@@ -265,13 +284,21 @@ void toNegociate(double spread){
       MqlRates lastCandle = candles[periodAval-2];
       ORIENTATION orientFI = verifyForceIndex();
       
-      Comment("Total de robôs: ", countRobots, 
+      Comment("Total de robôs: ", NUMBER_ROBOTS_ACTIVE, 
             " Lucro Atual: ", DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2),
             " Melhor Orientação: ", verifyPeriod(bestOrientation),
             " Orientação FI: ", verifyPeriod(orientFI));
       
      if(bestOrientation == MEDIUM || orientFI == bestOrientation){
-         executeOrderByRobots(orientFI, ACTIVE_VOLUME, STOP_LOSS * 5, TAKE_PROFIT * 5);
+         if( lockBuy == OFF && orientFI == UP){
+            executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS * 5, TAKE_PROFIT * 5);
+         }
+         else if( lockSell == OFF && orientFI == DOWN){
+            executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS * 5, TAKE_PROFIT * 5);
+         }
+         else if( lockSell == OFF && lockBuy == OFF){
+            executeOrderByRobots(orientFI, ACTIVE_VOLUME, STOP_LOSS * 5, TAKE_PROFIT * 5);
+         }
      } 
       
 }
@@ -455,25 +482,42 @@ void  decideToCreateOrDeleteRobots(){
          ORIENTATION orientFI = verifyForceIndex();
          ORIENTATION orientAverages = verifyOrientationAverage(candles[periodAval-1].close);
          if(countBuy > countSell){
-            if(orientAverages != DOWN && orientFI != DOWN ){
-               bestOrientation = UP;
-               executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+            if( lockBuy == OFF){
+               if(orientAverages != DOWN && orientFI != DOWN ){
+                  bestOrientation = UP;
+                  executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+               }
             }
          }
          else if(countBuy < countSell){
-            if(orientAverages != UP && orientFI != UP){
-               bestOrientation = DOWN;
-               executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+            if( lockSell == OFF){
+               if(orientAverages != UP && orientFI != UP){
+                  bestOrientation = DOWN;
+                  executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT);
+              }
            }
          }
       }
    }else{
-      if((countRobots > 10 * NUMBER_ROBOTS) && (MathAbs(profit2 / countRobots) >= 100)){
+      if(LOCK_IN_LOSS == ON){
          if(countLossBuy > countLossSell){
-            closeAllPositionsByType(POSITION_TYPE_BUY);
+            lockBuy = ON;
+         }else if(countLossBuy < countLossSell){
+            lockSell = ON;
+         }else if(countLossBuy == countLossSell){
+            lockBuy = OFF;
+            lockSell = ON;
          }
-         if(countLossSell > countLossBuy){
-              closeAllPositionsByType(POSITION_TYPE_SELL);
+      }
+      
+      if(CONDITIONAL_EXCLUSION == ON){
+         if((countRobots > 10 * NUMBER_ROBOTS) && (MathAbs(profit2) >= STOP_LOSS)){
+            if(countLossBuy > countLossSell){
+               closeAllPositionsByType(POSITION_TYPE_BUY);
+            }
+            if(countLossSell > countLossBuy){
+                 closeAllPositionsByType(POSITION_TYPE_SELL);
+            }
          }
       }
    }
