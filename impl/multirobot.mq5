@@ -300,13 +300,13 @@ void toNegociate(double spread){
     // showComments(orientFI);
      if(bestOrientation == MEDIUM || orientFI == bestOrientation){
          if( lockBuy == OFF && orientFI == UP){
-            executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS * 5, TAKE_PROFIT * 5);
+            executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS , TAKE_PROFIT );
          }
          else if( lockSell == OFF && orientFI == DOWN){
-            executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS * 5, TAKE_PROFIT * 5);
+            executeOrderByRobots(DOWN, ACTIVE_VOLUME, STOP_LOSS , TAKE_PROFIT );
          }
          else if( lockSell == OFF && lockBuy == OFF){
-            executeOrderByRobots(orientFI, ACTIVE_VOLUME, STOP_LOSS * 5, TAKE_PROFIT * 5);
+            executeOrderByRobots(orientFI, ACTIVE_VOLUME, STOP_LOSS , TAKE_PROFIT );
          }
      } 
       
