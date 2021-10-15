@@ -505,6 +505,12 @@ void  decideToCreateOrDeleteRobots(){
          }
       }
    }else{
+      if(countBuy > countSell){
+         bestOrientation = UP;
+      }
+      else if(countBuy < countSell){
+         bestOrientation = DOWN;
+      }
       if(LOCK_IN_LOSS == ON){
          if(countLossBuy > countLossSell){
             lockBuy = ON;
