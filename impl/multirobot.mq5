@@ -132,6 +132,7 @@ int MULTIPLIER_ROBOTS = 1;
 double BALANCE_ACTIVE = 0, INITIAL_BALANCE;
 ORIENTATION bestOrientation = MEDIUM;
 POWER lockBuy = OFF, lockSell = OFF;
+ORIENTATION orientFI = MEDIUM;
 
 void OnChartEvent(const int id,
                   const long &lparam,
@@ -240,11 +241,23 @@ void OnTick()
             toNegociate(spread);
             countTicks = COUNT_TICKS;
          }
+         
+         ORIENTATION orientFI = verifyForceIndex();
+         showComments(orientFI);
          updateNumberRobots();
          moveAllPositions(spread);
          countTicks--;
       }
    }
+}
+
+void showComments(ORIENTATION orientFI){
+   Comment("Total de robôs: ", NUMBER_ROBOTS_ACTIVE, 
+         " Lucro Atual: ", DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2),
+         " Melhor Orientação: ", verifyPeriod(bestOrientation),
+         " Orientação FI: ", verifyPeriod(orientFI),
+         " Compra Travada: ", verifyPower(lockBuy),
+         " Venda Travada: ", verifyPower(lockSell));
 }
 
 void updateNumberRobots(){
@@ -284,11 +297,7 @@ void toNegociate(double spread){
       MqlRates lastCandle = candles[periodAval-2];
       ORIENTATION orientFI = verifyForceIndex();
       
-      Comment("Total de robôs: ", NUMBER_ROBOTS_ACTIVE, 
-            " Lucro Atual: ", DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2),
-            " Melhor Orientação: ", verifyPeriod(bestOrientation),
-            " Orientação FI: ", verifyPeriod(orientFI));
-      
+    // showComments(orientFI);
      if(bestOrientation == MEDIUM || orientFI == bestOrientation){
          if( lockBuy == OFF && orientFI == UP){
             executeOrderByRobots(UP, ACTIVE_VOLUME, STOP_LOSS * 5, TAKE_PROFIT * 5);
@@ -719,6 +728,14 @@ bool toBuyOrToSell(ORIENTATION orient, double volume, double stopLoss, double ta
    
    return realizeDeals(typeDeal, volume, stopLoss, takeProfit, magicNumber);
    //getHistory();
+}
+
+string verifyPower(POWER power){
+   if(power == ON){
+      return "ON";
+   }else{
+      return "OFF";
+   }
 }
 
 bool hasPositionOpen(int position ){
