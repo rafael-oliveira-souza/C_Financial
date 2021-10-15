@@ -415,19 +415,16 @@ ORIENTATION verifyForceIndex(){
    double forceIArray[], forceValue[5], fiMax = 0, fiMin = 0, fMedia = 0;
    //ArraySetAsSeries(forceIArray, true);   
    
-   if(CopyBuffer(handleFI,0,0,handleFI,forceIArray) == handleFI){
-      //fiMax = forceIArray[ArrayMaximum(forceIArray,0,handleFI/2)];
-      //fiMin = forceIArray[ArrayMinimum(forceIArray,0,handleFI/2)];
-      //points = calcPoints(fiMax, 0);
-      //points = calcPoints(fiMin, 0);
-      if(handleFI > 5){
-         forceValue[0] = NormalizeDouble(forceIArray[handleFI-1], _Digits);
+   if(CopyBuffer(handleFI,0,0,1,forceIArray) == 1){
+      if(handleFI > 0){
+        /* forceValue[0] = NormalizeDouble(forceIArray[handleFI-1], _Digits);
          forceValue[1] = NormalizeDouble(forceIArray[handleFI-2], _Digits);
          forceValue[2] = NormalizeDouble(forceIArray[handleFI-3], _Digits);
          forceValue[3] = NormalizeDouble(forceIArray[handleFI-4], _Digits);
          forceValue[4] = NormalizeDouble(forceIArray[handleFI-5], _Digits);
          fMedia =  (forceValue[0] + forceValue[1] + forceValue[2] + forceValue[3] + forceValue[4]) / 5;
-         
+         */
+         fMedia = forceIArray[0];
          if(fMedia > 1500 ){
             return UP;
          }else if(fMedia < -1500  ){
