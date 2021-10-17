@@ -137,7 +137,7 @@ double upperBand[], middleBand[], lowerBand[], upperBand5[], middleBand5[], lowe
 int handleaverages[10], handleBand[2] ,handleICCI, handleVol, handleMACD[2], handleIRVI, handleFI, handleIRSI;
 
 int MULTIPLIER_ROBOTS = 1, NUMBER_MAX_ROBOTS_ACTIVE = 0;
-double BALANCE_ACTIVE = 0, INITIAL_BALANCE = 0, INITIAL_INVESTIMENT = 0;
+double BALANCE_ACTIVE = 0, INITIAL_BALANCE = 0, INITIAL_INVESTIMENT_ACTIVE = 0, INITIAL_INVESTIMENT = 0;
 ORIENTATION bestOrientation = MEDIUM;
 POWER lockBuy = OFF, lockSell = OFF;
 int countBuy = 0, countSell = 0;
@@ -225,9 +225,9 @@ int OnInit(){
       createButton("btnMoveStop", 20, 300, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Mover Stops", clrWhite, clrBlue, clrBlue, false);
       createButton("btnBuy", 230, 300, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Criar " + IntegerToString(NUMBER_ROBOTS) +" Robôs de Compra", clrWhite, clrBlue, clrBlue, false);
       createButton("btnSell", 440, 300, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Criar " + IntegerToString(NUMBER_ROBOTS) +" Robôs de Venda", clrWhite, clrBlue, clrBlue, false);
-      createButton("btnDoubleVol", 20, 150, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Multiplicar Volume por 2", clrWhite, clrBlue, clrBlue, false);
-      createButton("btnDivVol", 230, 150, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Dividir Volume por 2", clrWhite, clrBlue, clrBlue, false);
-      createButton("btnResetVol", 440, 150, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Resetar Volume", clrWhite, clrBlue, clrBlue, false);
+      createButton("btnDoubleVol", 20, 250, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Multiplicar Volume por 2", clrWhite, clrBlue, clrBlue, false);
+      createButton("btnDivVol", 230, 250, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Dividir Volume por 2", clrWhite, clrBlue, clrBlue, false);
+      createButton("btnResetVol", 440, 250, 200, 30, CORNER_LEFT_LOWER, 12, "Arial", "Resetar Volume", clrWhite, clrBlue, clrBlue, false);
    
       handleFI = iForce(_Symbol,PERIOD_H4, PERIOD_FI ,MODE_SMA,VOLUME_TICK);
       handleaverages[0] = iMA(_Symbol,PERIOD_H4, 8, 0, MODE_SMA, PRICE_CLOSE);
@@ -237,6 +237,7 @@ int OnInit(){
       handleVol = iVolumes(_Symbol,PERIOD_H4,VOLUME_TICK);
       BALANCE_ACTIVE = AccountInfoDouble(ACCOUNT_BALANCE);
       INITIAL_BALANCE = BALANCE_ACTIVE;
+      INITIAL_INVESTIMENT_ACTIVE = BALANCE_ACTIVE;
       INITIAL_INVESTIMENT = BALANCE_ACTIVE;
       NUMBER_MAX_ROBOTS_ACTIVE = NUMBER_MAX_ROBOTS;
       updateNumberRobots();
@@ -304,6 +305,28 @@ void updateNumberRobots(){
    double profit = AccountInfoDouble(ACCOUNT_PROFIT);
    BALANCE_ACTIVE = AccountInfoDouble(ACCOUNT_BALANCE);
    
+   if(EXPONENTIAL_VOLUME == ON){
+      if((BALANCE_ACTIVE+profit) / INITIAL_BALANCE >= 2){
+         MULTIPLIER_ROBOTS++;
+         INITIAL_BALANCE = BALANCE_ACTIVE+profit;
+         ACTIVE_VOLUME *= 2; 
+         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
+      }
+      /*else if((BALANCE_ACTIVE+profit) < INITIAL_INVESTIMENT_ACTIVE){
+         ACTIVE_VOLUME = VOLUME;
+         INITIAL_INVESTIMENT_ACTIVE = (BALANCE_ACTIVE+profit);
+         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
+         //INITIAL_BALANCE = (BALANCE_ACTIVE+profit);
+      }*/
+      
+      if(INITIAL_BALANCE >= INITIAL_INVESTIMENT_ACTIVE * NUMBER_ROBOTS){
+         ACTIVE_VOLUME = VOLUME;
+         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE + NUMBER_ROBOTS ;
+         NUMBER_MAX_ROBOTS_ACTIVE += NUMBER_ROBOTS;
+         INITIAL_INVESTIMENT_ACTIVE = INITIAL_BALANCE;
+      }
+   }
+   
    if(EXPONENTIAL_ROBOTS == ON){  
       if(profit > BALANCE_ACTIVE * ACTIVE_VOLUME){
          if(NUMBER_MAX_ROBOTS_ACTIVE > NUMBER_ROBOTS_ACTIVE){
@@ -312,33 +335,14 @@ void updateNumberRobots(){
          }else{
             Print("Maximo de robôs permitidos ");
          }
-      }else  if(profit <  -(BALANCE_ACTIVE * ACTIVE_VOLUME)){
-         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
-         //NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS > NUMBER_ROBOTS ? NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS : NUMBER_ROBOTS;
+      }else  if((profit) <  -(INITIAL_INVESTIMENT)){
+           NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
+         //INITIAL_INVESTIMENT_ACTIVE -= (BALANCE_ACTIVE+profit);
+        // NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS > NUMBER_ROBOTS ? NUMBER_ROBOTS_ACTIVE - 2*NUMBER_ROBOTS : NUMBER_ROBOTS;
          Print("Removendo robos: " + IntegerToString(NUMBER_ROBOTS_ACTIVE));
       }
    }else{
       NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
-   }
-   
-   if(EXPONENTIAL_VOLUME == ON){
-      if((BALANCE_ACTIVE+profit) / INITIAL_BALANCE >= 2){
-         MULTIPLIER_ROBOTS++;
-         INITIAL_BALANCE = BALANCE_ACTIVE+profit;
-         //NUMBER_MAX_ROBOTS_ACTIVE += NUMBER_ROBOTS;
-         ACTIVE_VOLUME *= 2; 
-         NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
-      }else if((BALANCE_ACTIVE+profit) < INITIAL_INVESTIMENT){
-         ACTIVE_VOLUME = VOLUME;
-         INITIAL_BALANCE = INITIAL_INVESTIMENT;
-         //INITIAL_BALANCE = (BALANCE_ACTIVE+profit);
-      }
-      
-      if(INITIAL_BALANCE >= INITIAL_INVESTIMENT * NUMBER_ROBOTS){
-         ACTIVE_VOLUME = VOLUME;
-         NUMBER_MAX_ROBOTS_ACTIVE += NUMBER_MAX_ROBOTS_ACTIVE;
-         INITIAL_BALANCE = INITIAL_INVESTIMENT;
-      }
    }
    
    
@@ -581,8 +585,8 @@ void  decideToCreateOrDeleteRobots(){
       //lockSell = OFF;
       if(MARGIN_CONDITIONAL == ON){
          double margin =  AccountInfoDouble(ACCOUNT_MARGIN_FREE);
-         double marginMin = (INITIAL_INVESTIMENT * MARGIN_CONDITIONAL_PERCENT / 100);
-         if(MathAbs(INITIAL_INVESTIMENT + profit2) < marginMin){
+         double marginMin = (INITIAL_INVESTIMENT_ACTIVE * MARGIN_CONDITIONAL_PERCENT / 100);
+         if(MathAbs(INITIAL_INVESTIMENT_ACTIVE + profit2) < marginMin){
             int count = 0;
             if(profitBuy > 0){
                closeAllPositionsByType(POSITION_TYPE_SELL);
