@@ -97,7 +97,7 @@ input bool ORDER = true;
 input int ORDER_DURATION = 300;
 input double ORDER_LIMIT_POINT = 100;
 input double  MARGIN_CONDITIONAL_PERCENT = 70;
-input POWER  MARGIN_CONDITIONAL = ON;
+input POWER  MARGIN_CONDITIONAL = OFF;
 input POWER  EXPONENTIAL_ROBOTS = ON;
 input POWER  EXPONENTIAL_VOLUME = ON;
 input POWER  ACTIVE_MOVE_TAKE = ON;
@@ -328,17 +328,17 @@ void updateNumberRobots(){
    }
    
    if(EXPONENTIAL_ROBOTS == ON){  
-      if(profit > BALANCE_ACTIVE * ACTIVE_VOLUME){
+      if(profit > INITIAL_INVESTIMENT * ACTIVE_VOLUME){
          if(NUMBER_MAX_ROBOTS_ACTIVE > NUMBER_ROBOTS_ACTIVE){
             NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE + NUMBER_ROBOTS ;
             Print("Adicionando novos robos: " + IntegerToString(NUMBER_ROBOTS_ACTIVE));
          }else{
             Print("Maximo de robôs permitidos ");
          }
-      }else  if((profit) <  -(INITIAL_INVESTIMENT)){
-           NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
+      }else  if((profit < 0 && MathAbs(profit) > INITIAL_INVESTIMENT * ACTIVE_VOLUME)){
+          NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
          //INITIAL_INVESTIMENT_ACTIVE -= (BALANCE_ACTIVE+profit);
-        // NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS > NUMBER_ROBOTS ? NUMBER_ROBOTS_ACTIVE - 2*NUMBER_ROBOTS : NUMBER_ROBOTS;
+         //NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE - NUMBER_ROBOTS > NUMBER_ROBOTS ? NUMBER_ROBOTS_ACTIVE - 2*NUMBER_ROBOTS : NUMBER_ROBOTS;
          Print("Removendo robos: " + IntegerToString(NUMBER_ROBOTS_ACTIVE));
       }
    }else{
