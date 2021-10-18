@@ -230,11 +230,11 @@ void OnChartEvent(const int id,
       }
       
       if(sparam == "btnUpStopBuy"){
-         moveStopPerPoint(POSITION_TYPE_SELL, 100);
+         moveStopPerPoint(POSITION_TYPE_BUY, 100);
       }
       
       if(sparam == "btnDownStopBuy"){
-         moveStopPerPoint(POSITION_TYPE_SELL, -100);
+         moveStopPerPoint(POSITION_TYPE_BUY, -100);
       }
       
       if(sparam == "btnUpTakeSell"){
@@ -331,8 +331,13 @@ void OnTick()
                   }
                   countTicks--;
                }
+            }else{
+               closeOrdersByDuration(0);
             } 
-         }
+         }else{
+            closeOrdersByDuration(0);
+         } 
+            
          ORIENTATION orientFI = verifyForceIndex();
          showComments(orientFI);
       }
