@@ -96,9 +96,8 @@ struct PeriodProtectionTime {
 input bool ORDER = true;
 input int ORDER_DURATION = 300;
 input double ORDER_LIMIT_POINT = 150;
-input long DURATION_POSITION_IN_LOSS = 900;
-input double  MARGIN_CONDITIONAL_PERCENT = 70; 
-POWER  MARGIN_CONDITIONAL = OFF;
+input long DURATION_POSITION_IN_LOSS = 0;
+input double  POINTS_TO_CLOSE = 50000;
 input POWER  EXPONENTIAL_ROBOTS = ON;
 input POWER  EXPONENTIAL_VOLUME = ON;
 input POWER  ACTIVE_MOVE_TAKE = ON;
@@ -110,13 +109,13 @@ input ulong MAGIC_NUMBER = 3232131231231231;
 input int NUMBER_ROBOTS = 10;
 input int NUMBER_MAX_ROBOTS = 400;
 input int COUNT_TICKS = 60;
-input double TAKE_PROFIT = 150;
+input double TAKE_PROFIT = 300;
 input double STOP_LOSS = 300;
 input int MULTIPLIER_VOLUME = 2;
 input double VOLUME = 0.01;
 input int PERIOD_FI = 13;
 input double CANDLE_POINTS = 300;
-input double MIN_BALANCE = 400;
+input double MIN_BALANCE = 0;
 
 POWER  LOCK_IN_LOSS = OFF;
 POWER USE_MAGIC_NUMBER = ON;
@@ -164,25 +163,26 @@ void OnChartEvent(const int id,
       
       if(sparam == "btnCloseAll"){
          closeAll();
+         closeOrdersByDuration(0);
       }
       if(sparam == "btnMoveStop"){
          int pos = PositionsTotal() - 1;
          for(int i = pos; i >= 0; i--)  {
-            activeStopMovelPerPoints(TAKE_PROFIT, i);
+            activeStopMovelPerPoints(50, i);
          }
       }
       if(sparam == "btnBuy"){
          ulong magic = MAGIC_NUMBER + 6000;
          for(int i = 0; i < NUMBER_ROBOTS; i++){
             magic = magic + i;
-            realizeDeals(BUY, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
+            realizeDeals(BUY, VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
          }
       }
       if(sparam == "btnSell"){
          ulong magic = MAGIC_NUMBER + 6000;
          for(int i = 0; i < NUMBER_ROBOTS; i++){
             magic = magic + i;
-            realizeDeals(SELL, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
+            realizeDeals(SELL, VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
          }
       }
       
@@ -373,14 +373,9 @@ void updateNumberRobots(){
          MULTIPLIER_ROBOTS++;
          INITIAL_BALANCE = BALANCE_ACTIVE+profit;
          ACTIVE_VOLUME *= 2;
-         //NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
-      }
-      /*else if((BALANCE_ACTIVE+profit) < INITIAL_INVESTIMENT_ACTIVE){
-         ACTIVE_VOLUME = VOLUME;
-         INITIAL_INVESTIMENT_ACTIVE = (BALANCE_ACTIVE+profit);
          NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS;
-         //INITIAL_BALANCE = (BALANCE_ACTIVE+profit);
-      }*/
+      }
+      
       
       if(INITIAL_BALANCE >= INITIAL_INVESTIMENT_ACTIVE * NUMBER_ROBOTS){
          ACTIVE_VOLUME = VOLUME;
@@ -392,6 +387,19 @@ void updateNumberRobots(){
    }
    
    if(EXPONENTIAL_ROBOTS == ON){  
+      if(POINTS_TO_CLOSE > 0){
+         if(profit > 0 && profit > POINTS_TO_CLOSE * ACTIVE_VOLUME){
+            closeAll();
+         }else if(profit < 0 && MathAbs(profit) > POINTS_TO_CLOSE * ACTIVE_VOLUME ){
+            if(ACTIVE_VOLUME / 2 < 0.01){
+             ACTIVE_VOLUME /= 0.01;
+            }else{
+             ACTIVE_VOLUME /= 2;
+            }
+            closeAll();
+         }
+      }
+      
       if(profit > 0){
          if(NUMBER_MAX_ROBOTS_ACTIVE > NUMBER_ROBOTS_ACTIVE){
             NUMBER_ROBOTS_ACTIVE = NUMBER_ROBOTS_ACTIVE + NUMBER_ROBOTS ;
@@ -807,7 +815,7 @@ void  closeOrdersByDuration(long duration){
 void moveStopPerPoint(ENUM_POSITION_TYPE type, double points){
    int pos = PositionsTotal() - 1;
    for(int position = pos; position >= 0; position--)  {
-      moveStopOrTake(type, false, position, points);
+      moveStopOrTake(type, true, position, points);
    }
 }  
 
