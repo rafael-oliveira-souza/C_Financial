@@ -175,14 +175,14 @@ void OnChartEvent(const int id,
          ulong magic = MAGIC_NUMBER + 6000;
          for(int i = 0; i < NUMBER_ROBOTS; i++){
             magic = magic + i;
-            realizeDeals(BUY, VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
+            realizeDeals(BUY, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
          }
       }
       if(sparam == "btnSell"){
          ulong magic = MAGIC_NUMBER + 6000;
          for(int i = 0; i < NUMBER_ROBOTS; i++){
             magic = magic + i;
-            realizeDeals(SELL, VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
+            realizeDeals(SELL, ACTIVE_VOLUME, STOP_LOSS, TAKE_PROFIT, magic);
          }
       }
       
