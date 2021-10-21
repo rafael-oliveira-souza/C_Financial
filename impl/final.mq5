@@ -105,7 +105,6 @@ input POWER  ACTIVE_MOVE_TAKE = ON;
 input POWER  ACTIVE_MOVE_STOP = ON;
 input double PERCENT_MOVE = 70;
 input double PONTUATION_MOVE_STOP = 400;
-input string CLOSING_TIME = "23:00";
 input ulong MAGIC_NUMBER = 3232131231231231;
 input int NUMBER_ROBOTS = 10;
 input int NUMBER_MAX_ROBOTS = 400;
@@ -115,12 +114,13 @@ input double STOP_LOSS = 300;
 input int MULTIPLIER_VOLUME = 2;
 input double VOLUME = 0.01;
 input int PERIOD_FI = 13;
- double CANDLE_POINTS = 300;
 input double MIN_BALANCE = 0;
 input string START_TIME = "01:30";
 input string END_TIME = "23:20";
 input ENUM_TIMEFRAMES TIME_FRAME = PERIOD_H4;
 
+ double CANDLE_POINTS = 300;
+ 
 POWER  LOCK_IN_LOSS = OFF;
 POWER USE_MAGIC_NUMBER = ON;
 double PONTUATION_ESTIMATE = 500;
@@ -425,46 +425,26 @@ void toNegociate(double spread){
       MqlRates lastCandle = candles[periodAval-2];
       
     // showComments(orientFI);
-     double stop = STOP_LOSS * 3;
-     double take = TAKE_PROFIT * 3;
+     double stop = STOP_LOSS * 2;
+     double take = TAKE_PROFIT * 2;
      if(bestOrientation == MEDIUM ){
          if( lockBuy == ON){
-          //  if(qtdSellersWon >= qtdSellersLoss){
                executeOrderByRobots(DOWN, ACTIVE_VOLUME, stop , take );
-          //  }
          }
          else if( lockSell == ON){
-            //if(qtdBuyersWon >= qtdBuyersLoss){
                executeOrderByRobots(UP, ACTIVE_VOLUME, stop , take );
-            //}
          }
-         else if( lockSell == OFF && lockBuy == OFF && PositionsTotal() < 6){
+         else if( lockSell == OFF && lockBuy == OFF && PositionsTotal() < 2){
             executeOrderByRobots(UP, ACTIVE_VOLUME, stop , take);
             executeOrderByRobots(DOWN, ACTIVE_VOLUME, stop, take);
          }
      } else{
          ORIENTATION orientFI = verifyForceIndex();
          if( lockSell == OFF && bestOrientation == DOWN){
-            if(orientFI == bestOrientation){
-              // if(qtdSellersWon >= qtdSellersLoss){
-                  executeOrderByRobots(DOWN, ACTIVE_VOLUME * (MULTIPLIER_VOLUME < 1 ? 1 : MULTIPLIER_VOLUME), stop, take);
-              // }
-            }else{
-               //if(qtdSellersWon >= qtdSellersLoss){
-                  executeOrderByRobots(DOWN, ACTIVE_VOLUME, stop, take);
-              // }
-            }
+            executeOrderByRobots(DOWN, ACTIVE_VOLUME, stop, take);
          }
          else if( lockBuy == OFF && bestOrientation == UP){
-            if(orientFI == bestOrientation){
-              // if(qtdBuyersWon >= qtdBuyersLoss){
-                  executeOrderByRobots(UP, ACTIVE_VOLUME * (MULTIPLIER_VOLUME < 1 ? 1 : MULTIPLIER_VOLUME), stop, take);
-              // }
-            }else{
-              // if(qtdBuyersWon >= qtdBuyersLoss){
-                  executeOrderByRobots(UP, ACTIVE_VOLUME, stop, take);
-              // }
-            }
+             executeOrderByRobots(UP, ACTIVE_VOLUME, stop, take);
          }
      }
       
@@ -619,13 +599,13 @@ void  decideToCreateOrDeleteRobots(){
                   
                   if(profit > 0 ){
                      qtdBuyersWon++; 
-                     if(MOVIMENT_PERMANENT <= 0 && pointsTake < TAKE_PROFIT){
+                     if(MOVIMENT_PERMANENT > 0 && pointsTake < TAKE_PROFIT){
                         moveStopOrTake(type, true, position, -(MOVIMENT_PERMANENT));
                         moveStopOrTake(type, false, position, MOVIMENT_PERMANENT);
                      }
                   }else if(profit < 0){
                      qtdBuyersLoss++;
-                     if(MOVIMENT_PERMANENT <= 0 ){
+                     if(MOVIMENT_PERMANENT > 0 ){
                         moveStopOrTake(type, true, position, MOVIMENT_PERMANENT);
                         moveStopOrTake(type, false, position, -(MOVIMENT_PERMANENT));
                      }
@@ -638,13 +618,13 @@ void  decideToCreateOrDeleteRobots(){
                   
                   if(profit > 0 ){
                      qtdSellersWon++; 
-                     if(MOVIMENT_PERMANENT <= 0 &&  pointsTake < TAKE_PROFIT){
+                     if(MOVIMENT_PERMANENT > 0 &&  pointsTake < TAKE_PROFIT){
                         moveStopOrTake(type, true, position, MOVIMENT_PERMANENT);
                         moveStopOrTake(type, false, position, -(MOVIMENT_PERMANENT));
                      }
                   }else if(profit < 0){
                      qtdSellersLoss++;
-                     if(MOVIMENT_PERMANENT <= 0 ){
+                     if(MOVIMENT_PERMANENT > 0 ){
                         moveStopOrTake(type, true, position, -(MOVIMENT_PERMANENT));
                         moveStopOrTake(type, false, position, MOVIMENT_PERMANENT);
                      }
