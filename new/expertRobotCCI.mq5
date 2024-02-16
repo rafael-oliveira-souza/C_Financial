@@ -103,23 +103,25 @@ struct PeriodProtectionTime {
 
 
 input ENUM_TIMEFRAMES PERIOD = PERIOD_H1;
-input double ACTIVE_VOLUME = 0.1;
-input double LOSS_PER_DAY = 30;
-input double PROFIT_PER_DAY = 0;
+input double ACTIVE_VOLUME = 0.01;
+input double LOSS_PER_DAY = 10;
+input double LOSS_PER_OPERATION = 10;
+input double PROFIT_PER_DAY = 10;
 input string SCHEDULE_START_PROTECTION = "00:00";
 input string SCHEDULE_END_PROTECTION = "00:00";
-input int NUMBER_MAX_ROBOTS = 10;
+input int NUMBER_MAX_ROBOTS = 1;
 input bool CALIBRATE_ORDERS = true;
-input ulong MAGIC_NUMBER = 200296;
+ ulong MAGIC_NUMBER = 200296;
 int WAIT_TICKS = 0;
 int WAIT_CANDLES = 0;
-input double MAX_LOSS_PER_OPERATION = 30;
-input int LOCK_ORDERS_BY_TYPE_IF_LOSS = 5;
+input int LOCK_ORDERS_BY_TYPE_IF_LOSS = 0;
 input int ONLY_OPEN_NEW_ORDER_AFTER = 0;
 input bool EXECUTE_CCI = true;
-input bool EXECUTE_IFORCE = false;
+ bool EXECUTE_IFORCE = false;
+ bool EXECUTE_BEARS_AND_BULLS = false;
 input int MAX_CCI_VALUE = 100;
-input int MAX_FORCE_VALUE = 0;
+ int MAX_FORCE_VALUE = 0;
+ double MAX_BULLS_AND_BEARS_VALUE = 5;
 
 MqlRates candles[];
 datetime actualDay = 0;
@@ -127,8 +129,8 @@ bool negociationActive = false;
 MqlTick tick;                // variável para armazenar ticks 
 
 
-double CCI[], IFORCE[], valuePrice = 0;
-int handleICCI, handleIForce, countAverage = 0;
+double CCI[], IFORCE[], IBulls[], IBears[], valuePrice = 0;
+int handleICCI, handleIForce, handleBears, handleBulls, countAverage = 0;
 ORIENTATION orientMacro = MEDIUM;
 double activeBalance= 0;
 int numberMaxRobotsActive = 0, waitTicks = 0, waitCandles = 0; 
@@ -136,12 +138,15 @@ bool waitNewDay = false, dailyProfitReached = false;
 int countRobots = 0, periodAval = 3;
 ulong robots[];
 datetime startedDatetimeRobot;
+bool sellOrdersLocked = true,  buyOrdersLocked = true;
 //+------------------------------------------------------------------+
 //                                                                          | Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit() {
    handleICCI = iCCI(_Symbol,PERIOD,14,PRICE_TYPICAL);
-   handleIForce = iForce(_Symbol,PERIOD,14, MODE_SMA, VOLUME_TICK);
+   //handleIForce = iForce(_Symbol,PERIOD,14, MODE_SMA, VOLUME_TICK);
+   //handleBears = iBearsPower(_Symbol,PERIOD,14);
+   //handleBulls = iBullsPower(_Symbol,PERIOD,14);
    activeBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    numberMaxRobotsActive = NUMBER_MAX_ROBOTS;
    startedDatetimeRobot = TimeCurrent();
@@ -161,22 +166,31 @@ void OnTick() {
          startedDatetimeRobot = TimeCurrent();
          printf("Novo dia iniciado!");
          waitNewDay = false;
+         waitCandles = 0;
+         waitTicks = 0;
       }
    
       if(!waitNewDay && verifyTimeToProtection()){
          int copiedPrice = CopyRates(_Symbol,PERIOD,0,3,candles);
          if(copiedPrice == 3){
-             waitNewDay = verifyResultPerDay(startedDatetimeRobot);
+            waitNewDay = verifyResultPerDay(startedDatetimeRobot);
             if(hasNewCandle()) {
                waitCandles--;
             }
             if(waitCandles <= 0 && waitTicks <= 0) {
+               MainCandles mainCandles = generateMainCandles();
+               if(sellOrdersLocked == true || buyOrdersLocked == true){
+                  removeLockIfNotExistOrder();
+               }
               // showComments();
                if(EXECUTE_CCI){
-                  executeCCI();
+                 executeCCI(mainCandles);
                }
                if(EXECUTE_IFORCE){
-                  executeIForce();
+               //   executeIForce(mainCandles);
+               }
+               if(EXECUTE_BEARS_AND_BULLS){
+                //  executeBearsAndBullsPower(mainCandles);
                }
             }
          }   
@@ -184,9 +198,35 @@ void OnTick() {
    }
 }
 
-void executeIForce(){
+void executeBearsAndBullsPower(MainCandles& mainCandles){
+   if(CopyBuffer(handleBulls,0,0,periodAval,IBulls) == periodAval && CopyBuffer(handleBears,0,0,periodAval,IBears) == periodAval) {
+      if(MathAbs(IBulls[periodAval-2] / IBears[periodAval-2]) > MAX_BULLS_AND_BEARS_VALUE ) {
+         if((IBulls[periodAval-2]) > 0 && (IBears[periodAval-2]) < 0 && (IBulls[periodAval-1]) > 0 && (IBears[periodAval-1]) < 0) {
+            if(mainCandles.secondLastOrientation == DOWN && mainCandles.lastOrientation == UP && mainCandles.actualOrientation == UP ) {
+               double stop = calcPoints(mainCandles.last.high, mainCandles.last.low, true);
+               lockOrderInLoss();
+               if(!sellOrdersLocked) {
+                  calibrateOrdersAndBuyOrSell(DOWN, stop, stop/2);
+               }
+            }
+         }
+      }
+      else if(MathAbs(IBulls[periodAval-2] / IBears[periodAval-2]) > MAX_BULLS_AND_BEARS_VALUE ) {
+         if((IBulls[periodAval-2]) < 0 && (IBears[periodAval-2]) > 0 && (IBulls[periodAval-1]) < 0 && (IBears[periodAval-1]) > 0) {
+            if(mainCandles.secondLastOrientation == UP && mainCandles.lastOrientation == DOWN && mainCandles.actualOrientation == DOWN) {
+               double stop = calcPoints(mainCandles.last.high, mainCandles.last.low, true);
+               lockOrderInLoss();
+               if(!buyOrdersLocked) {
+                  calibrateOrdersAndBuyOrSell(UP, stop, stop/2);
+               }
+            }
+         }
+      }
+   }
+}
+
+void executeIForce(MainCandles& mainCandles){
    if(CopyBuffer(handleIForce,0,0,periodAval,IFORCE) == periodAval) {
-      MainCandles mainCandles = generateMainCandles();
       double actualIdx = IFORCE[periodAval-3];
       double lastIdx = IFORCE[periodAval-2];
       double secondLastIdx = IFORCE[periodAval-1];
@@ -199,9 +239,10 @@ void executeIForce(){
                   
                   double take = calcPoints(mainCandles.secondLast.open, mainCandles.actual.close, true);
                   double stop = calcPoints(max, mainCandles.actual.close, true);
+                  lockOrderInLoss();
                   
-                  if(!lockOrderInLoss(POSITION_TYPE_SELL)) {
-                     calibrateOrdersAndBuyOrSell(DOWN, stop);
+                  if(!sellOrdersLocked) {
+                     calibrateOrdersAndBuyOrSell(DOWN, stop, stop/2);
                   }
                }
             }
@@ -217,8 +258,9 @@ void executeIForce(){
                   double take = calcPoints(mainCandles.secondLast.open, mainCandles.actual.close, true);
                   double stop = calcPoints(max, mainCandles.actual.close, true);
                   
-                  if(!lockOrderInLoss(POSITION_TYPE_BUY)) {
-                     calibrateOrdersAndBuyOrSell(UP, stop);
+                  lockOrderInLoss();
+                  if(!buyOrdersLocked) {
+                     calibrateOrdersAndBuyOrSell(UP, stop, stop/2);
                   }
                }
             }
@@ -227,24 +269,24 @@ void executeIForce(){
    }
 }
 
-void executeCCI(){
+void executeCCI(MainCandles& mainCandles){
    if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval) {
-      MainCandles mainCandles = generateMainCandles();
       double actualIdx = CCI[periodAval-3];
       double lastIdx = CCI[periodAval-2];
       double secondLastIdx = CCI[periodAval-1];
       if(mainCandles.secondLastOrientation == UP &&  secondLastIdx >= MAX_CCI_VALUE) {
          if(mainCandles.lastOrientation == UP &&  lastIdx >= MAX_CCI_VALUE) {
-            if(mainCandles.actualOrientation == DOWN &&  actualIdx <= MAX_CCI_VALUE) {
-               if(mainCandles.actual.close < mainCandles.last.low) {
+            if(mainCandles.actualOrientation != UP &&  actualIdx <= MAX_CCI_VALUE) {
+               if(mainCandles.actual.close <= mainCandles.last.low ) {
                   double max = mainCandles.last.high > mainCandles.secondLast.high ? mainCandles.last.high : mainCandles.secondLast.high;
                   max = max > mainCandles.actual.high ? max : mainCandles.actual.high;
                   
                   double take = calcPoints(mainCandles.secondLast.open, mainCandles.actual.close, true);
                   double stop = calcPoints(max, mainCandles.actual.close, true);
-                  
-                  if(!lockOrderInLoss(POSITION_TYPE_SELL)) {
-                     calibrateOrdersAndBuyOrSell(DOWN, stop);
+                
+                  lockOrderInLoss();
+                  if(!sellOrdersLocked) {
+                     calibrateOrdersAndBuyOrSell(DOWN, stop, stop/2);
                   }
                }
             }
@@ -252,16 +294,17 @@ void executeCCI(){
       }
       else if(mainCandles.secondLastOrientation == DOWN &&  secondLastIdx <= -MAX_CCI_VALUE) {
          if(mainCandles.lastOrientation == DOWN && lastIdx <= -MAX_CCI_VALUE) {
-            if(mainCandles.actualOrientation == UP &&  actualIdx >= -MAX_CCI_VALUE) {
-               if(mainCandles.actual.close > mainCandles.last.high) {
+            if(mainCandles.actualOrientation != DOWN &&  actualIdx >= -MAX_CCI_VALUE) {
+               if(mainCandles.actual.close >= mainCandles.last.high) {
                   double max = mainCandles.last.high > mainCandles.secondLast.high ? mainCandles.last.high : mainCandles.secondLast.high;
                   max = max > mainCandles.actual.high ? max : mainCandles.actual.high;
                  
                   double take = calcPoints(mainCandles.secondLast.open, mainCandles.actual.close, true);
                   double stop = calcPoints(max, mainCandles.actual.close, true);
                   
-                  if(!lockOrderInLoss(POSITION_TYPE_BUY)) {
-                     calibrateOrdersAndBuyOrSell(UP, stop);
+                  lockOrderInLoss();
+                  if(!buyOrdersLocked) {
+                     calibrateOrdersAndBuyOrSell(UP, stop, stop/2);
                   }
                }
             }
@@ -270,46 +313,84 @@ void executeCCI(){
    }
 }
 
-bool lockOrderInLoss(ENUM_POSITION_TYPE positionType){
+double calculateBullsAndBearsPower(double bullsPower, double bearsPower, bool absValue = true){
+   return absValue ? (MathAbs(bullsPower) + MathAbs(bearsPower)) : (bullsPower + bearsPower);
+}
+
+void lockOrderInLoss(){
+   int sellOrdersInLoss = 0, buyOrdersInLoss = 0;
    if(LOCK_ORDERS_BY_TYPE_IF_LOSS > 0){
-      int ordersInLoss = 0;
-      for(int position = countRobots; position >= 0; position--)  {
-         ulong magicNumber = robots[position];
-         if(hasPositionOpenWithMagicNumber(position, magicNumber)){
+      for(int position = PositionsTotal()-1; position >= 0; position--)  {
+         //ulong magicNumber = robots[position];
+         if(hasPositionOpen(position)){
             ulong ticket = PositionGetTicket(position);
             PositionSelectByTicket(ticket);
+            double profit = PositionGetDouble(POSITION_PROFIT);
+            double current = PositionGetDouble(POSITION_PRICE_CURRENT);
+            double open = PositionGetDouble(POSITION_PRICE_OPEN);
+            double volume = PositionGetDouble(POSITION_VOLUME);
+            double stopLoss = PositionGetDouble(POSITION_SL);
+            double maxLoss = 1;
          
-            if(PositionGetInteger(POSITION_TYPE) == positionType ){
-              double profit = PositionGetDouble(POSITION_PROFIT);
-              double volume = PositionGetDouble(POSITION_VOLUME);
-              if(profit < 0 && MathAbs(profit) >= (volume * MAX_LOSS_PER_OPERATION * 0.5)){
-                ordersInLoss++;
-              }
+            if(profit < 0 ){
+               Print("Is Locked to " + IntegerToString(PositionGetInteger(POSITION_TYPE)));
+               if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
+                 buyOrdersInLoss++;
+               }
+               else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
+                 sellOrdersInLoss++;
+               }
             }
          }
       }
       
-      if(ordersInLoss >= LOCK_ORDERS_BY_TYPE_IF_LOSS) {
-         Print("Is Locked to " + EnumToString(positionType));
-         return true;
+      if(buyOrdersInLoss >= LOCK_ORDERS_BY_TYPE_IF_LOSS) {
+         buyOrdersLocked = true;
+      }
+      if(sellOrdersInLoss >= LOCK_ORDERS_BY_TYPE_IF_LOSS) {
+        sellOrdersLocked = true;
       }
    }
    
-   return false;
 }
 
-void calibrateOrdersAndBuyOrSell(ORIENTATION orient, double stopLossPoints){
-   double volume = ACTIVE_VOLUME;
-   if(CALIBRATE_ORDERS){
-      if(MAX_LOSS_PER_OPERATION > 0){
-         while(MAX_LOSS_PER_OPERATION < (stopLossPoints * volume)) {
-            volume = volume - 0.01;
+void removeLockIfNotExistOrder(){
+   int sellOrdersInLoss = 0, buyOrdersInLoss = 0;
+   for(int position = PositionsTotal()-1; position >= 0; position--)  {
+      if(hasPositionOpen(position)){
+         if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
+           buyOrdersInLoss++;
+         }
+         else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
+           sellOrdersInLoss++;
          }
       }
    }
    
+   if(buyOrdersLocked == true && buyOrdersInLoss == 0) {
+      buyOrdersLocked = false;
+   }
+   else if(sellOrdersLocked == true && sellOrdersInLoss == 0) {
+      sellOrdersLocked = false;
+   }
+}
+
+void calibrateOrdersAndBuyOrSell(ORIENTATION orient, double stopLossPoints, double take){
+   double volume = ACTIVE_VOLUME;
+   
+   if(LOSS_PER_OPERATION > 0){
+      if(CALIBRATE_ORDERS){
+         while(LOSS_PER_OPERATION < (stopLossPoints * volume)) {
+            volume = volume - 0.01;
+         }
+      }
+      if(LOSS_PER_OPERATION > 0 && LOSS_PER_OPERATION < (stopLossPoints * volume)) {
+         return;
+      }
+   }
+   
    if(verifyIfSecondsIsBetterThanTimeFromLastPosition(ONLY_OPEN_NEW_ORDER_AFTER)) {
-      toBuyOrToSell(orient, volume, stopLossPoints, stopLossPoints, robots[countRobots]);
+      toBuyOrToSell(orient, volume, stopLossPoints, take, robots[countRobots]);
    }
 }
 
