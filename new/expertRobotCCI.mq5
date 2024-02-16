@@ -102,7 +102,7 @@ struct PeriodProtectionTime {
 };
 
 
-input ENUM_TIMEFRAMES PERIOD = PERIOD_H1;
+input ENUM_TIMEFRAMES PERIOD = PERIOD_M15;
 input double ACTIVE_VOLUME = 0.01;
 input double LOSS_PER_DAY = 0;
 input double LOSS_PER_OPERATION = 0;
@@ -116,6 +116,7 @@ input bool CALIBRATE_ORDERS = true;
 int WAIT_TICKS = 0;
 int WAIT_CANDLES = 0;
 input int LOCK_ORDERS_BY_TYPE_IF_LOSS = 3;
+input int LOCK_ORDERS_BY_SECONDS = 1000;
 input int ONLY_OPEN_NEW_ORDER_AFTER = 0;
 input bool EXECUTE_CCI = true;
  bool EXECUTE_IFORCE = false;
@@ -327,7 +328,8 @@ double calculateBullsAndBearsPower(double bullsPower, double bearsPower, bool ab
 void lockOrderInLoss(){
    int sellOrdersInLoss = 0, buyOrdersInLoss = 0;
    if(LOCK_ORDERS_BY_TYPE_IF_LOSS > 0){
-      for(int position = PositionsTotal()-1; position >= 0; position--)  {
+      long now = (long)TimeCurrent();
+      for(int position = PositionsTotal(); position >= 0; position--)  {
          //ulong magicNumber = robots[position];
          if(hasPositionOpen(position)){
             ulong ticket = PositionGetTicket(position);
@@ -337,9 +339,8 @@ void lockOrderInLoss(){
             double open = PositionGetDouble(POSITION_PRICE_OPEN);
             double volume = PositionGetDouble(POSITION_VOLUME);
             double stopLoss = PositionGetDouble(POSITION_SL);
-            double maxLoss = 1;
          
-            if(profit < 0 ){
+            if(profit < 0 && (LOCK_ORDERS_BY_SECONDS <=0 || verifyIfSecondsIsBetterThanTimeFromPosition(now, position, LOCK_ORDERS_BY_SECONDS))){
                Print("Is Locked to " + IntegerToString(PositionGetInteger(POSITION_TYPE)));
                if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
                  buyOrdersInLoss++;
@@ -396,7 +397,9 @@ void calibrateOrdersAndBuyOrSell(ORIENTATION orient, double stopLossPoints, doub
       }
    }
    
-   if(verifyIfSecondsIsBetterThanTimeFromLastPosition(ONLY_OPEN_NEW_ORDER_AFTER)) {
+   int lastPosition = PositionsTotal()-1;
+   long now = (long)TimeCurrent();
+   if(verifyIfSecondsIsBetterThanTimeFromPosition(now, lastPosition, ONLY_OPEN_NEW_ORDER_AFTER)) {
       toBuyOrToSell(orient, volume, stopLossPoints, take, robots[countRobots]);
    }
 }
@@ -546,7 +549,7 @@ bool hasPositionOpenWithMagicNumber(int position, ulong magicNumberRobot){
 bool hasNewCandle(){
    static datetime lastTime = 0;
    
-   datetime lastBarTime = (datetime)SeriesInfoInteger(Symbol(),PERIOD_CURRENT,SERIES_LASTBAR_DATE);
+   datetime lastBarTime = (datetime)SeriesInfoInteger(Symbol(),PERIOD,SERIES_LASTBAR_DATE);
    
    //primeira chamada da funcao
    if(lastTime == 0){
@@ -600,7 +603,7 @@ ORIENTATION getOrientationPerCandles(MqlRates& prev, MqlRates& actual){
 
 MainCandles generateMainCandles(){
    MainCandles mainCandles;
-   int copiedPrice = CopyRates(_Symbol,_Period,0,3,candles);
+   int copiedPrice = CopyRates(_Symbol,PERIOD,0,periodAval,candles);
    if(copiedPrice == 3){
       mainCandles.actual = candles[2];
       mainCandles.last = candles[1];
@@ -638,12 +641,10 @@ double calcPoints(double val1, double val2, bool absValue = true){
    }
 }
 
-bool verifyIfSecondsIsBetterThanTimeFromLastPosition(int seconds) {
-   int lastPosition = PositionsTotal()-1;
-   if(lastPosition >= 0 && hasPositionOpen(lastPosition)){
-      ulong ticket = PositionGetTicket(lastPosition);
+bool verifyIfSecondsIsBetterThanTimeFromPosition( long now, int position, int seconds) {
+   if(position >= 0 && hasPositionOpen(position)){
+      ulong ticket = PositionGetTicket(position);
       PositionSelectByTicket(ticket);
-      long now = (long)TimeCurrent();
       long positionDatetime = PositionGetInteger(POSITION_TIME);
       return seconds <= ((now - positionDatetime));
    }
