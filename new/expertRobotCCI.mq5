@@ -104,17 +104,18 @@ struct PeriodProtectionTime {
 
 input ENUM_TIMEFRAMES PERIOD = PERIOD_H1;
 input double ACTIVE_VOLUME = 0.01;
-input double LOSS_PER_DAY = 10;
-input double LOSS_PER_OPERATION = 10;
-input double PROFIT_PER_DAY = 10;
+input double LOSS_PER_DAY = 0;
+input double LOSS_PER_OPERATION = 0;
+input double PROFIT_PER_DAY = 0;
+input double PROPORTION_TAKE_STOP = 0.5;
 input string SCHEDULE_START_PROTECTION = "00:00";
 input string SCHEDULE_END_PROTECTION = "00:00";
-input int NUMBER_MAX_ROBOTS = 1;
+input int NUMBER_MAX_ROBOTS = 10;
 input bool CALIBRATE_ORDERS = true;
  ulong MAGIC_NUMBER = 200296;
 int WAIT_TICKS = 0;
 int WAIT_CANDLES = 0;
-input int LOCK_ORDERS_BY_TYPE_IF_LOSS = 0;
+input int LOCK_ORDERS_BY_TYPE_IF_LOSS = 3;
 input int ONLY_OPEN_NEW_ORDER_AFTER = 0;
 input bool EXECUTE_CCI = true;
  bool EXECUTE_IFORCE = false;
@@ -280,13 +281,16 @@ void executeCCI(MainCandles& mainCandles){
                if(mainCandles.actual.close <= mainCandles.last.low ) {
                   double max = mainCandles.last.high > mainCandles.secondLast.high ? mainCandles.last.high : mainCandles.secondLast.high;
                   max = max > mainCandles.actual.high ? max : mainCandles.actual.high;
-                  
-                  double take = calcPoints(mainCandles.secondLast.open, mainCandles.actual.close, true);
                   double stop = calcPoints(max, mainCandles.actual.close, true);
+                  double take = stop;
+                  
+                  if(!bodyGreaterThanWick(mainCandles.last)){
+                     take = stop * PROPORTION_TAKE_STOP;
+                  }
                 
                   lockOrderInLoss();
                   if(!sellOrdersLocked) {
-                     calibrateOrdersAndBuyOrSell(DOWN, stop, stop/2);
+                     calibrateOrdersAndBuyOrSell(DOWN, stop, take);
                   }
                }
             }
@@ -298,13 +302,16 @@ void executeCCI(MainCandles& mainCandles){
                if(mainCandles.actual.close >= mainCandles.last.high) {
                   double max = mainCandles.last.high > mainCandles.secondLast.high ? mainCandles.last.high : mainCandles.secondLast.high;
                   max = max > mainCandles.actual.high ? max : mainCandles.actual.high;
-                 
-                  double take = calcPoints(mainCandles.secondLast.open, mainCandles.actual.close, true);
                   double stop = calcPoints(max, mainCandles.actual.close, true);
+                  double take = stop;
+                  
+                  if(!bodyGreaterThanWick(mainCandles.last)){
+                     take = stop * PROPORTION_TAKE_STOP;
+                  }
                   
                   lockOrderInLoss();
                   if(!buyOrdersLocked) {
-                     calibrateOrdersAndBuyOrSell(UP, stop, stop/2);
+                     calibrateOrdersAndBuyOrSell(UP, stop, take);
                   }
                }
             }
@@ -708,6 +715,12 @@ void moveAllStopPerPoint(double points){
       }
    }
 }  
+
+bool bodyGreaterThanWick(MqlRates& candle){
+   double body = calcPoints(candle.close, candle.open, true);
+   double wick = MathAbs(body- calcPoints(candle.low, candle.high, true));
+   return body >= wick;
+}
 
 void instanciateBorder(BordersOperation& borders){
      borders.max = 0;
