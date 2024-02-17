@@ -868,21 +868,38 @@ void protectOrderInGain(double points){
             double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
             double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
             double profit = PositionGetDouble(POSITION_PROFIT);
-            double tpPrice = PositionGetDouble(POSITION_TP);
+            double newTake = PositionGetDouble(POSITION_TP);
             double newSl = PositionGetDouble(POSITION_SL);
             double pointsGain = calcPoints(entryPrice, currentPrice, true);
+            double pointsToTake = calcPoints(newTake, currentPrice, true);
             
             if( profit > 0 && pointsGain >= points && newSl <= entryPrice){
                if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
-                   newSl = entryPrice + (points * 0.1 * _Point);
+                   newSl = entryPrice + (points * 0.2 * _Point);
                }
                else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
-                   newSl = entryPrice - (points * 0.1 * _Point);
+                   newSl = entryPrice - (points * 0.2 * _Point);
                }
                
-               tradeLib.PositionModify(ticket, entryPrice,tpPrice);
+               tradeLib.PositionModify(ticket, newSl, newTake);
                if(verifyResultTrade()){
                   Print("Ordem Protegida");
+               }
+            }
+            
+            if( profit > 0 && pointsGain >= pointsToTake * 0.7){
+               if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
+                   newTake = newTake + (pointsToTake * 0.1 * _Point);
+                   newSl = entryPrice + (pointsToTake * 0.2 * _Point);
+               }
+               else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
+                   newTake = newTake - (pointsToTake * 0.1 * _Point);
+                   newSl = entryPrice - (pointsToTake * 0.2 * _Point);
+               }
+               
+               tradeLib.PositionModify(ticket, newSl, newTake);
+               if(verifyResultTrade()){
+                  Print("Take Avancado");
                }
             }
          }
