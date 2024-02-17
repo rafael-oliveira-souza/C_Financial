@@ -873,7 +873,7 @@ void protectOrderInGain(double points){
             double pointsGain = calcPoints(entryPrice, currentPrice, true);
             double pointsToTake = calcPoints(newTake, currentPrice, true);
             
-            if( profit > 0 && pointsGain >= points && newSl <= entryPrice){
+            if( profit > 0 && (pointsGain >= points || pointsGain >= pointsToTake * 0.7) && newSl <= entryPrice){
                if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
                    newSl = entryPrice + (points * 0.2 * _Point);
                }
@@ -887,13 +887,13 @@ void protectOrderInGain(double points){
                }
             }
             
-            if( profit > 0 && pointsGain >= pointsToTake * 0.7){
+            if( profit > 0 && pointsGain >= pointsToTake * 0.7 && newSl >= entryPrice){
                if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
-                   newTake = newTake + (pointsToTake * 0.1 * _Point);
+                  /// newTake = newTake + (pointsToTake * 0.01 * _Point);
                    newSl = entryPrice + (pointsToTake * 0.2 * _Point);
                }
                else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
-                   newTake = newTake - (pointsToTake * 0.1 * _Point);
+                 //  newTake = newTake - (pointsToTake * 0.01 * _Point);
                    newSl = entryPrice - (pointsToTake * 0.2 * _Point);
                }
                
