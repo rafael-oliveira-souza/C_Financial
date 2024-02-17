@@ -126,12 +126,13 @@ input double PROPORTION_TAKE_STOP = 0.5;
 input string SCHEDULE_START_PROTECTION = "00:00";
 input string SCHEDULE_END_PROTECTION = "00:00";
 input int NUMBER_MAX_ROBOTS = 10;
-input bool CALIBRATE_ORDERS = true;
 input int LOCK_ORDERS_BY_TYPE_IF_LOSS = 3;
 input int LOCK_ORDERS_BY_SECONDS = 0;
 input int ONLY_OPEN_NEW_ORDER_AFTER = 30;
+input double PROTECT_ORDERS_IN_GAIN_BY_POINTS = 300;
 input bool EXECUTE_CCI = true;
 input bool EXECUTE_BOLLINGER_BANDS = true;
+input bool CALIBRATE_ORDERS = true;
  bool EXECUTE_CCI_V = false;
  bool EXECUTE_IFORCE = false;
  bool EXECUTE_BEARS_AND_BULLS = false;
@@ -196,6 +197,10 @@ void OnTick() {
          waitNewDay = false;
          waitCandles = 0;
          waitTicks = 0;
+      }
+      
+      if(countRobots > 0 && PROTECT_ORDERS_IN_GAIN_BY_POINTS > 0) {
+         protectOrderInGain(PROTECT_ORDERS_IN_GAIN_BY_POINTS);
       }
    
       if(!waitNewDay && verifyTimeToProtection()){
@@ -852,6 +857,38 @@ bool verifyResultPerDay(datetime date){
    
    return false;
 }
+
+void protectOrderInGain(double points){
+   if(points > 0) {
+      for(int position = PositionsTotal(); position >= 0; position--)  {
+         ulong magicNumber = robots[position];
+         if(hasPositionOpenWithMagicNumber(position, magicNumber)){
+            ulong ticket = PositionGetTicket(position);
+            PositionSelectByTicket(ticket);
+            double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
+            double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double profit = PositionGetDouble(POSITION_PROFIT);
+            double tpPrice = PositionGetDouble(POSITION_TP);
+            double newSl = PositionGetDouble(POSITION_SL);
+            double pointsGain = calcPoints(entryPrice, currentPrice, true);
+            
+            if( profit > 0 && pointsGain >= points && newSl <= entryPrice){
+               if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
+                   newSl = entryPrice + (points * 0.1 * _Point);
+               }
+               else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
+                   newSl = entryPrice - (points * 0.1 * _Point);
+               }
+               
+               tradeLib.PositionModify(ticket, entryPrice,tpPrice);
+               if(verifyResultTrade()){
+                  Print("Ordem Protegida");
+               }
+            }
+         }
+      }
+   }
+}  
 
 void moveAllStopPerPoint(double points){
    for(int position = PositionsTotal(); position >= 0; position--)  {
