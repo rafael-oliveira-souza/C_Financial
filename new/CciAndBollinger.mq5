@@ -1054,3 +1054,18 @@ void initRobots(int numRobots) {
       robots[i] = MAGIC_NUMBER + i; 
    }
 }
+
+void drawHorizontalLine(double price, string nameLine, color indColor){
+   long charId = StringToInteger(_Symbol);
+   ObjectCreate(charId,nameLine,OBJ_HLINE,0,0,price);
+   ObjectSetInteger(0,nameLine,OBJPROP_COLOR,indColor);
+   ObjectSetInteger(0,nameLine,OBJPROP_WIDTH,1);
+   ObjectMove(charId,nameLine,0,0,price);
+}
+
+void drawVerticalLine(datetime time, string nameLine, color indColor){
+   long charId = StringToInteger(_Symbol);
+   ObjectCreate(charId,nameLine,OBJ_VLINE,0,time,0);
+   ObjectSetInteger(0,nameLine,OBJPROP_COLOR,indColor);
+   ObjectSetInteger(0,nameLine,OBJPROP_WIDTH,1);
+}
