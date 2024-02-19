@@ -329,9 +329,9 @@ void executeCCI(MainCandles& mainCandles){
                   double stop = calcPoints(max, mainCandles.actual.close, true);
                   double take = stop;
                   
-                  if(!bodyGreaterThanWick(mainCandles.last)){
+                  //if(!bodyGreaterThanWick(mainCandles.last)){
                      take = stop * PROPORTION_TAKE_STOP;
-                  }
+                 // }
                 
                   lockOrderInLoss();
                   if(!sellOrdersLocked) {
@@ -350,9 +350,9 @@ void executeCCI(MainCandles& mainCandles){
                   double stop = calcPoints(max, mainCandles.actual.close, true);
                   double take = stop;
                   
-                  if(!bodyGreaterThanWick(mainCandles.last)){
+                 // if(!bodyGreaterThanWick(mainCandles.last)){
                      take = stop * PROPORTION_TAKE_STOP;
-                  }
+                 // }
                   
                   lockOrderInLoss();
                   if(!buyOrdersLocked) {
