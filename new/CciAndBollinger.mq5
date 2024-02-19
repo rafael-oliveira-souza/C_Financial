@@ -118,7 +118,7 @@ struct PeriodProtectionTime {
 
 
 input ENUM_TIMEFRAMES PERIOD = PERIOD_H1;
-input double ACTIVE_VOLUME = 0.01;
+input double VOLUME = 0.01;
 input double LOSS_PER_DAY = 0;
 input double LOSS_PER_OPERATION = 0;
 input double PROFIT_PER_DAY = 0;
@@ -133,10 +133,14 @@ input double PROTECT_ORDERS_IN_GAIN_BY_POINTS = 300;
 input bool EXECUTE_CCI = true;
 input bool EXECUTE_BOLLINGER_BANDS = true;
 input bool CALIBRATE_ORDERS = true;
+input bool MOVE_STOP_AND_TAKE = true;
+input bool EXECUTE_EXPONENTIAL_ROBOTS = false;
+input bool EXECUTE_EXPONENTIAL_VOLUME = true;
  bool EXECUTE_CCI_V = false;
  bool EXECUTE_IFORCE = false;
  bool EXECUTE_BEARS_AND_BULLS = false;
 input int MAX_CCI_VALUE = 100;
+input double INITIAL_BALANCE = 25;
  int MAX_FORCE_VALUE = 0;
  double MAX_BULLS_AND_BEARS_VALUE = 5;
  ulong MAGIC_NUMBER = 200296;
@@ -153,7 +157,7 @@ double Middle[], Upper[], Lower[];
 double CCI[], IFORCE[], IBulls[], IBears[], valuePrice = 0;
 int handleICCI, handleIForce, handleAverage9, handleAverage21, handleAverage80, handleAverage200, handleAverage400, handleAverage600, handleBears, handleBulls, handleBollinger;
 ORIENTATION orientMacro = MEDIUM;
-double activeBalance= 0;
+double ACTIVE_BALANCE= 0, LAST_BALANCE_ROBOTS = 0, LAST_BALANCE_GOALS = 0, ACTIVE_VOLUME = 0;
 int numberMaxRobotsActive = 0, waitTicks = 0, waitCandlesBollinger = 0, waitCandles = 0, countAverage = 0; 
 bool waitNewDay = false, dailyProfitReached = false;
 int countRobots = 0, periodAval = 5;
@@ -176,22 +180,22 @@ int OnInit() {
    //handleIForce = iForce(_Symbol,PERIOD,14, MODE_SMA, VOLUME_TICK);
    //handleBears = iBearsPower(_Symbol,PERIOD,14);
    //handleBulls = iBullsPower(_Symbol,PERIOD,14);
-   activeBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+   ACTIVE_BALANCE = AccountInfoDouble(ACCOUNT_BALANCE);
+   LAST_BALANCE_ROBOTS = AccountInfoDouble(ACCOUNT_BALANCE);
+   LAST_BALANCE_GOALS = AccountInfoDouble(ACCOUNT_BALANCE);
+   ACTIVE_VOLUME = VOLUME;
    numberMaxRobotsActive = NUMBER_MAX_ROBOTS;
    startedDatetimeRobot = TimeCurrent();
-   
-   ArrayResize(robots, numberMaxRobotsActive);
-   for(int i = 0; i < numberMaxRobotsActive; i++)  {
-      robots[i] = MAGIC_NUMBER + i; 
-   }
+   initRobots(numberMaxRobotsActive);
    return(INIT_SUCCEEDED);
 }
   
 void OnTick() {
    countRobots = PositionsTotal();
-   if(countRobots < NUMBER_MAX_ROBOTS) {
+   if(countRobots < numberMaxRobotsActive) {
       waitTicks--;
       if(isNewDay(startedDatetimeRobot)) {
+         //INITIAL_BALANCE = AccountInfoDouble(ACCOUNT_BALANCE);
          startedDatetimeRobot = TimeCurrent();
          printf("Novo dia iniciado!");
          waitNewDay = false;
@@ -210,13 +214,15 @@ void OnTick() {
             if(hasNewCandle()) {
                waitCandles--;
                waitCandlesBollinger--;
+              // showComments();
             }
             if(waitCandles <= 0 && waitTicks <= 0) {
+               moveStopAndTake(PROTECT_ORDERS_IN_GAIN_BY_POINTS);
+               executeExponentials();
                MainCandles mainCandles = generateMainCandles();
                if(sellOrdersLocked == true || buyOrdersLocked == true){
                   removeLockIfNotExistOrder();
                }
-              // showComments();
                if(EXECUTE_CCI){
                  executeCCI(mainCandles);
                }
@@ -561,7 +567,7 @@ void showComments(){
    Comment(
          " Total de robôs Disponiveis: ", (numberMaxRobotsActive - countRobots),
          " Total de robôs ativos: ", (countRobots), 
-         " Saldo: ", DoubleToString(activeBalance + profit, 2),
+         " Saldo: ", DoubleToString(ACTIVE_BALANCE + profit, 2),
          " Lucro Atual: ", DoubleToString(profit, 2),
          " Volume: ", ACTIVE_VOLUME);
 }
@@ -663,7 +669,6 @@ bool toBuyOrToSell(ORIENTATION orient, double volume, double stopLoss, double ta
 
 bool hasPositionOpen(int position){
     string symbol = PositionGetSymbol(position);
-         ulong magicNumber = PositionGetInteger(POSITION_MAGIC);
     if(PositionSelect(symbol) == true) {
       return true;       
     }
@@ -872,8 +877,9 @@ void protectOrderInGain(double points){
             double newSl = PositionGetDouble(POSITION_SL);
             double pointsGain = calcPoints(entryPrice, currentPrice, true);
             double pointsToTake = calcPoints(newTake, currentPrice, true);
+            double pointsToStop = calcPoints(newSl, currentPrice, true);
             
-            if( profit > 0 && (pointsGain >= points || pointsGain >= pointsToTake * 0.7) && newSl <= entryPrice){
+            if( profit > 0 && (pointsGain >= points) && newSl <= entryPrice && newSl <= entryPrice){
                if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
                    newSl = entryPrice + (points * 0.2 * _Point);
                }
@@ -886,21 +892,40 @@ void protectOrderInGain(double points){
                   Print("Ordem Protegida");
                }
             }
+         }
+      }
+   }
+}  
+
+void moveStopAndTake(double points){
+   if(MOVE_STOP_AND_TAKE) {
+      for(int position = PositionsTotal(); position >= 0; position--)  {
+         ulong magicNumber = robots[position];
+         if(hasPositionOpenWithMagicNumber(position, magicNumber)){
+            ulong ticket = PositionGetTicket(position);
+            PositionSelectByTicket(ticket);
+            double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
+            double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double profit = PositionGetDouble(POSITION_PROFIT);
+            double newTake = PositionGetDouble(POSITION_TP);
+            double pointsGain = calcPoints(entryPrice, currentPrice, true);
+            double pointsToTake = calcPoints(newTake, currentPrice, true);
             
-            if( profit > 0 && pointsGain >= pointsToTake * 0.7 && newSl >= entryPrice){
+           if( profit > 0 && pointsGain >= pointsToTake * 0.5){
                if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
-                  /// newTake = newTake + (pointsToTake * 0.01 * _Point);
-                   newSl = entryPrice + (pointsToTake * 0.2 * _Point);
+                  // newTake = newTake + (points * _Point);
+                   moveStopPerPoint(position, points);
                }
                else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
-                 //  newTake = newTake - (pointsToTake * 0.01 * _Point);
-                   newSl = entryPrice - (pointsToTake * 0.2 * _Point);
+                   //newTake = newTake - (points * _Point);
+                   moveStopPerPoint(position, points);
                }
-               
+               /*
+               double newSl = PositionGetDouble(POSITION_SL);
                tradeLib.PositionModify(ticket, newSl, newTake);
                if(verifyResultTrade()){
                   Print("Take Avancado");
-               }
+               }  */
             }
          }
       }
@@ -910,27 +935,42 @@ void protectOrderInGain(double points){
 void moveAllStopPerPoint(double points){
    for(int position = PositionsTotal(); position >= 0; position--)  {
       ulong magicNumber = robots[position];
-      if(hasPositionOpenWithMagicNumber(position, magicNumber)){
-         ulong ticket = PositionGetTicket(position);
-         PositionSelectByTicket(ticket);
-         double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
+      moveStopPerPoint(position, points);
+   }
+}  
+
+void moveStopPerPoint(int position, double points, double tpPrice = 0){
+   if(hasPositionOpen(position)){
+      ulong ticket = PositionGetTicket(position);
+      PositionSelectByTicket(ticket);
+      double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
+      double profit = PositionGetDouble(POSITION_PROFIT);
+      double tpPrice = PositionGetDouble(POSITION_TP);
+      double slPrice = PositionGetDouble(POSITION_SL);
+      double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double pointsGain = calcPoints(entryPrice, currentPrice, true);
+      
+      if(profit > 0 && pointsGain >= points) {
+         if(tpPrice > 0) {
+            tpPrice = PositionGetDouble(POSITION_TP);
+         }
          
          if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
-            double newSl = currentPrice - (points * _Point);
-            double tpPrice = PositionGetDouble(POSITION_TP);
-         
-            tradeLib.PositionModify(ticket, newSl,tpPrice);
-            if(verifyResultTrade()){
-               Print("Take movido");
+            double newSl = slPrice + (points * _Point);
+            if( newSl > slPrice || slPrice <= entryPrice){
+               tradeLib.PositionModify(ticket, newSl,tpPrice);
+               if(verifyResultTrade()){
+                  Print("Stop movido");
+               }
             }
          }
          else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
-            double newSl = currentPrice + (points * _Point);
-            double tpPrice = PositionGetDouble(POSITION_TP);
-         
-            tradeLib.PositionModify(ticket, newSl,tpPrice);
-            if(verifyResultTrade()){
-               Print("Take movido");
+            double newSl = slPrice - (points * _Point);
+            if( newSl < slPrice || slPrice <= entryPrice){
+               tradeLib.PositionModify(ticket, newSl,tpPrice);
+               if(verifyResultTrade()){
+                  Print("Stop movido");
+               }
             }
          }
       }
@@ -971,4 +1011,46 @@ bool inInterval(double& averages[], double value) {
    }
 
    return exist;
+}
+
+void executeExponentials() {
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   if(EXECUTE_EXPONENTIAL_VOLUME) {
+      double minimunVolume = 0.01;
+      double goal = INITIAL_BALANCE * 5;
+      double goalBalanceUp = LAST_BALANCE_GOALS + goal;
+      double goalBalanceDown = LAST_BALANCE_GOALS - goal;
+      
+      if(goalBalanceUp > 0  && balance > goalBalanceUp) {
+        ACTIVE_VOLUME =  NormalizeDouble(ACTIVE_VOLUME + minimunVolume, 2);
+        LAST_BALANCE_GOALS = goalBalanceUp;
+      }else if(goalBalanceDown > 0 && ACTIVE_VOLUME > minimunVolume && balance <= goalBalanceDown){
+        ACTIVE_VOLUME =  NormalizeDouble(ACTIVE_VOLUME - minimunVolume, 2);
+        LAST_BALANCE_GOALS = goalBalanceDown;
+      }
+   }
+   
+   if(EXECUTE_EXPONENTIAL_ROBOTS) {
+      double goal = INITIAL_BALANCE * 0.5;
+      double goalBalanceUp = LAST_BALANCE_ROBOTS + goal;
+      double goalBalanceDown = LAST_BALANCE_ROBOTS - goal;
+      
+      if(goalBalanceUp > 0 && balance > goalBalanceUp) {
+        numberMaxRobotsActive++;
+        initRobots(numberMaxRobotsActive);
+        LAST_BALANCE_ROBOTS = goalBalanceUp;
+      }else if(goalBalanceDown > 0 &&  numberMaxRobotsActive > 1 && balance <= goalBalanceDown){
+        numberMaxRobotsActive--;
+        initRobots(numberMaxRobotsActive);
+        LAST_BALANCE_ROBOTS = goalBalanceDown;
+      }
+   }
+   
+}
+
+void initRobots(int numRobots) {
+   ArrayResize(robots, numRobots);
+   for(int i = 0; i < numRobots; i++)  {
+      robots[i] = MAGIC_NUMBER + i; 
+   }
 }
