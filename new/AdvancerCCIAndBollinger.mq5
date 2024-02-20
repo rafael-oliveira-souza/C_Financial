@@ -187,8 +187,8 @@ int OnInit() {
    //handleBears = iBearsPower(_Symbol,PERIOD,14);
    //handleBulls = iBullsPower(_Symbol,PERIOD,14);
    ACTIVE_BALANCE = AccountInfoDouble(ACCOUNT_BALANCE);
-   LAST_BALANCE_ROBOTS = AccountInfoDouble(ACCOUNT_BALANCE);
-   LAST_BALANCE_GOALS = AccountInfoDouble(ACCOUNT_BALANCE);
+   LAST_BALANCE_ROBOTS = ACTIVE_BALANCE;
+   LAST_BALANCE_GOALS = ACTIVE_BALANCE;
    ACTIVE_VOLUME = VOLUME;
    numberMaxRobotsActive = NUMBER_MAX_ROBOTS;
    startedDatetimeRobot = TimeCurrent();
@@ -283,7 +283,7 @@ void calibrateOrdersAndSellCCI(MainCandles& mainCandles, NIVEL nvl){
    lockOrderInLoss();
    if(!sellOrdersLocked && NVL_CCI == nvl) {
       calibrateOrdersAndBuyOrSell(DOWN, stop, take);
-      drawVerticalLine(TimeCurrent(), EnumToString(nvl) + "_CCI_DOWN" + IntegerToString(robots[countRobots]), clrAquamarine);
+      drawHorizontalLine(mainCandles.actual.close, EnumToString(nvl) + "_CCI_DOWN" + IntegerToString(getActualRobot()), clrAquamarine);
    }
 }
 
@@ -296,7 +296,7 @@ void calibrateOrdersAndBuyCCI(MainCandles& mainCandles, NIVEL nvl){
    lockOrderInLoss();
    if(!buyOrdersLocked && NVL_CCI == nvl) {
       calibrateOrdersAndBuyOrSell(UP, stop, take);
-      drawVerticalLine(TimeCurrent(), EnumToString(nvl) + "_CCI_UP" + IntegerToString(robots[countRobots]), clrViolet);
+      drawHorizontalLine(mainCandles.actual.close, EnumToString(nvl) + "_CCI_UP" + IntegerToString(getActualRobot()), clrViolet);
    }
 }
 
@@ -343,7 +343,7 @@ void calibrateOrdersAndSellBollinger(MainCandles& mainCandles, NIVEL nvl){
    lockOrderInLoss();
    if(!sellOrdersLocked && NVL_BOLLINGER == nvl) {
       calibrateOrdersAndBuyOrSell(DOWN, stop, take);   
-      drawVerticalLine(TimeCurrent(), EnumToString(nvl) + "_BLG_DOWN" + IntegerToString(robots[countRobots]), clrYellow);
+      drawHorizontalLine(mainCandles.actual.close, EnumToString(nvl) + "_BLG_DOWN" + IntegerToString(getActualRobot()), clrYellow);
       waitCandlesBollinger = 0;
    }
 }
@@ -357,7 +357,7 @@ void calibrateOrdersAndBuyBollinger(MainCandles& mainCandles, NIVEL nvl){
    lockOrderInLoss();
    if(!buyOrdersLocked && NVL_BOLLINGER == nvl) {
       calibrateOrdersAndBuyOrSell(UP, stop, take);
-      drawVerticalLine(TimeCurrent(), EnumToString(nvl) + "_BLG_UP" + IntegerToString(robots[countRobots]), clrGreen);
+      drawHorizontalLine(mainCandles.actual.close, EnumToString(nvl) + "_BLG_UP" + IntegerToString(getActualRobot()), clrGreen);
       waitCandlesBollinger = 0;
    }
 }
@@ -432,6 +432,7 @@ bool validateSequence(MqlRates& candlesV[], int start, int end, bool isUp) {
 void lockOrderInLoss(){
    int sellOrdersInLoss = 0, buyOrdersInLoss = 0;
    double lockOrdersByTipeQtd = LOCK_ORDERS_BY_TYPE_IF_LOSS;
+   double sumBuys = 0, sumSells = 0;
    
    if(EXECUTE_EXPONENTIAL_ROBOTS && NUMBER_MAX_ROBOTS < numberMaxRobotsActive){
       lockOrdersByTipeQtd = NormalizeDouble(numberMaxRobotsActive * 0.3, 2);
@@ -449,8 +450,18 @@ void lockOrderInLoss(){
             double open = PositionGetDouble(POSITION_PRICE_OPEN);
             double volume = PositionGetDouble(POSITION_VOLUME);
             double stopLoss = PositionGetDouble(POSITION_SL);
+            double tpPrice = PositionGetDouble(POSITION_TP);
+            double points = calcPoints(open, tpPrice, true) * 0.01;
+            
+            
+            if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
+              sumBuys = sumBuys + profit;
+            }
+            else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
+              sumSells = sumSells + profit;
+            }
          
-            if(profit < 0 && (LOCK_ORDERS_BY_SECONDS <=0 || verifyIfSecondsIsBetterThanTimeFromPosition(now, position, LOCK_ORDERS_BY_SECONDS))){
+            if(profit < 0 && MathAbs(profit) >= points && (LOCK_ORDERS_BY_SECONDS <= 0 || verifyIfSecondsIsBetterThanTimeFromPosition(now, position, LOCK_ORDERS_BY_SECONDS))){
                Print("Is Locked to " + IntegerToString(PositionGetInteger(POSITION_TYPE)));
                if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
                  buyOrdersInLoss++;
@@ -462,15 +473,16 @@ void lockOrderInLoss(){
          }
       }
       
-      if(buyOrdersInLoss >= lockOrdersByTipeQtd) {
+      if(buyOrdersInLoss >= lockOrdersByTipeQtd && sumBuys < 0) {
          buyOrdersLocked = true;
       }
-      if(sellOrdersInLoss >= lockOrdersByTipeQtd) {
+      if(sellOrdersInLoss >= lockOrdersByTipeQtd && sumSells < 0) {
         sellOrdersLocked = true;
       }
    }
    
 }
+
 
 void removeLockIfNotExistOrder(){
    int sellOrdersInLoss = 0, buyOrdersInLoss = 0;
@@ -495,7 +507,6 @@ void removeLockIfNotExistOrder(){
 
 void calibrateOrdersAndBuyOrSell(ORIENTATION orient, double stopLossPoints, double take){
    double volume = ACTIVE_VOLUME;
-   
    if(LOSS_PER_OPERATION > 0){
       if(CALIBRATE_ORDERS){
          while(LOSS_PER_OPERATION < (stopLossPoints * volume)) {
@@ -510,12 +521,21 @@ void calibrateOrdersAndBuyOrSell(ORIENTATION orient, double stopLossPoints, doub
    int lastPosition = PositionsTotal()-1;
    long now = (long)TimeCurrent();
    if(verifyIfSecondsIsBetterThanTimeFromPosition(now, lastPosition, ONLY_OPEN_NEW_ORDER_AFTER)) {
-      toBuyOrToSell(orient, volume, stopLossPoints, take, robots[countRobots]);
+      toBuyOrToSell(orient, volume, stopLossPoints, take, getActualRobot());
    }
 }
 
 double calculateBullsAndBearsPower(double bullsPower, double bearsPower, bool absValue = true){
    return absValue ? (MathAbs(bullsPower) + MathAbs(bearsPower)) : (bullsPower + bearsPower);
+}
+
+ulong getActualRobot(){
+   if(ArraySize(robots) > countRobots) {
+      return robots[countRobots];
+   }else {
+      Print("Number max robots reached");
+      return NULL;
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -573,7 +593,7 @@ void toSell(double volume, double stopLoss, double takeProfit){
 bool realizeDeals(TYPE_NEGOCIATION typeDeals, double volume, double stopLoss, double takeProfit, ulong magicNumber){
    if(typeDeals != NONE){
       BordersOperation borders = normalizeTakeProfitAndStopLoss(stopLoss, takeProfit); 
-      if(countRobots <= NUMBER_MAX_ROBOTS && hasPositionOpenWithMagicNumber(countRobots, magicNumber) == false) {
+      if(countRobots <= numberMaxRobotsActive && hasPositionOpenWithMagicNumber(countRobots, magicNumber) == false) {
          if(typeDeals == BUY){ 
             toBuy(volume, borders.min, borders.max);
          }
