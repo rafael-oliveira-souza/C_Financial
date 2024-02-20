@@ -248,46 +248,25 @@ void executeCCI(MainCandles& mainCandles){
       double lastIdx = CCI[penultimo];
       double secondLastIdx = CCI[ultimo];
       if((mainCandles.secondLastOrientation == UP &&  secondLastIdx >= MAX_CCI_VALUE)) {
-         if(NVL_CCI == NVL_1){
-            calibrateOrdersAndSellCCI(mainCandles);
-            return;
-         }
+         calibrateOrdersAndSellCCI(mainCandles, NVL_1);
          if((mainCandles.lastOrientation == UP &&  lastIdx >= MAX_CCI_VALUE)) {
-            if(NVL_CCI == NVL_2){
-               calibrateOrdersAndSellCCI(mainCandles);
-               return;
-            }
+            calibrateOrdersAndSellCCI(mainCandles, NVL_2);
             if((mainCandles.actualOrientation != UP &&  actualIdx <= MAX_CCI_VALUE)) {
-               if(NVL_CCI == NVL_3){
-                  calibrateOrdersAndSellCCI(mainCandles);
-                  return;
-               }
+               calibrateOrdersAndSellCCI(mainCandles, NVL_3);
                if((mainCandles.actual.close <= mainCandles.last.low )) {
-                  calibrateOrdersAndSellCCI(mainCandles);
-                  return;
+                  calibrateOrdersAndSellCCI(mainCandles, NVL_4);
                }
             }
          }               
       }
       else if((mainCandles.secondLastOrientation == DOWN &&  secondLastIdx <= -MAX_CCI_VALUE)) {
-         if(NVL_CCI == NVL_1){
-            calibrateOrdersAndBuyCCI(mainCandles);
-            return;
-         }
+         calibrateOrdersAndBuyCCI(mainCandles, NVL_1);
          if((mainCandles.lastOrientation == DOWN && lastIdx <= -MAX_CCI_VALUE)) {
-            if(NVL_CCI == NVL_2){
-               calibrateOrdersAndBuyCCI(mainCandles);
-               return;
-            }
+            calibrateOrdersAndBuyCCI(mainCandles, NVL_2);
             if((mainCandles.actualOrientation != DOWN &&  actualIdx >= -MAX_CCI_VALUE)) {
-               if(NVL_CCI == NVL_3){
-                  calibrateOrdersAndBuyCCI(mainCandles);
-                  return;
-               }
-               
+               calibrateOrdersAndBuyCCI(mainCandles, NVL_3);
                if((mainCandles.actual.close >= mainCandles.last.high)) {
-                  calibrateOrdersAndBuyCCI(mainCandles);
-                  return;
+                  calibrateOrdersAndBuyCCI(mainCandles, NVL_4);
                }
             }
          }               
@@ -295,27 +274,29 @@ void executeCCI(MainCandles& mainCandles){
    }
 }
 
-void calibrateOrdersAndSellCCI(MainCandles& mainCandles){ 
+void calibrateOrdersAndSellCCI(MainCandles& mainCandles, NIVEL nvl){ 
    double max = mainCandles.last.high > mainCandles.secondLast.high ? mainCandles.last.high : mainCandles.secondLast.high;
    max = max > mainCandles.actual.high ? max : mainCandles.actual.high;
    double stop = calcPoints(max, mainCandles.actual.close, true);
    double take =  stop * PROPORTION_TAKE_STOP;
  
    lockOrderInLoss();
-   if(!sellOrdersLocked) {
+   if(!sellOrdersLocked && NVL_CCI == nvl) {
       calibrateOrdersAndBuyOrSell(DOWN, stop, take);
+      drawVerticalLine(TimeCurrent(), EnumToString(nvl) + "_CCI_DOWN" + IntegerToString(robots[countRobots]), clrAquamarine);
    }
 }
 
-void calibrateOrdersAndBuyCCI(MainCandles& mainCandles){ 
+void calibrateOrdersAndBuyCCI(MainCandles& mainCandles, NIVEL nvl){ 
    double max = mainCandles.last.high > mainCandles.secondLast.high ? mainCandles.last.high : mainCandles.secondLast.high;
    max = max > mainCandles.actual.high ? max : mainCandles.actual.high;
    double stop = calcPoints(max, mainCandles.actual.close, true);
    double take = stop * PROPORTION_TAKE_STOP;
    
    lockOrderInLoss();
-   if(!buyOrdersLocked) {
+   if(!buyOrdersLocked && NVL_CCI == nvl) {
       calibrateOrdersAndBuyOrSell(UP, stop, take);
+      drawVerticalLine(TimeCurrent(), EnumToString(nvl) + "_CCI_UP" + IntegerToString(robots[countRobots]), clrViolet);
    }
 }
 
@@ -326,44 +307,25 @@ void executeBollingerBands(MainCandles& mainCandles){
          && CopyBuffer(handleBollinger, 1, 0, periodAval, Upper) == periodAval
          && CopyBuffer(handleBollinger, 2, 0, periodAval, Lower) == periodAval) {
          if(getCandleOrientantion(candles[primeiro]) == UP  && candles[primeiro].close >= Upper[primeiro] ) {
-            if(NVL_BOLLINGER == NVL_1){
-               calibrateOrdersAndSellBollinger(mainCandles);
-               return;
-            }
+            calibrateOrdersAndSellBollinger(mainCandles, NVL_1);
             if(getCandleOrientantion(candles[segundo]) == UP  && candles[segundo].close >= Upper[segundo] ) {
-               if(NVL_BOLLINGER == NVL_2){
-                  calibrateOrdersAndSellBollinger(mainCandles);
-                  return;
-               }
+               calibrateOrdersAndSellBollinger(mainCandles, NVL_2);
                if(CCI[primeiro] >= MAX_CCI_VALUE && CCI[ultimo] <= MAX_CCI_VALUE) {
-                  if(NVL_BOLLINGER == NVL_3){
-                     calibrateOrdersAndSellBollinger(mainCandles);
-                     return;
-                  }
+                  calibrateOrdersAndSellBollinger(mainCandles, NVL_3);
                   if(mainCandles.actualOrientation == DOWN && mainCandles.actual.close <= Upper[ultimo]) {
-                     calibrateOrdersAndSellBollinger(mainCandles);
-                     return;
+                     calibrateOrdersAndSellBollinger(mainCandles, NVL_4);
                   } 
                }
             }              
          }
          else if(getCandleOrientantion(candles[primeiro]) == DOWN  && candles[primeiro].close <= Lower[primeiro] ) {
-            if(NVL_BOLLINGER == NVL_1){
-               calibrateOrdersAndBuyBollinger(mainCandles);
-               return;
-            }
+            calibrateOrdersAndBuyBollinger(mainCandles, NVL_1);
             if(getCandleOrientantion(candles[segundo]) == DOWN  && candles[segundo].close <= Lower[segundo]) {
-               if(NVL_BOLLINGER == NVL_2){
-                  calibrateOrdersAndBuyBollinger(mainCandles);
-                  return;
-               }
+               calibrateOrdersAndBuyBollinger(mainCandles, NVL_2);
                if( CCI[primeiro] <= -MAX_CCI_VALUE  && CCI[ultimo] >= -MAX_CCI_VALUE) {
-                  if(NVL_BOLLINGER == NVL_3){
-                     calibrateOrdersAndBuyBollinger(mainCandles);
-                     return;
-                  }
+                  calibrateOrdersAndBuyBollinger(mainCandles, NVL_3);
                   if(mainCandles.actualOrientation == UP && mainCandles.actual.close >= Lower[ultimo]) {
-                     calibrateOrdersAndBuyBollinger(mainCandles);
+                     calibrateOrdersAndBuyBollinger(mainCandles, NVL_4);
                      return;
                   }  
                }             
@@ -373,27 +335,29 @@ void executeBollingerBands(MainCandles& mainCandles){
    }
 }
 
-void calibrateOrdersAndSellBollinger(MainCandles& mainCandles){ 
+void calibrateOrdersAndSellBollinger(MainCandles& mainCandles, NIVEL nvl){ 
    double percent = 0.7;
    double stop = calcPoints(Upper[ultimo], Middle[ultimo], true)* percent;
    double take = stop * PROPORTION_TAKE_STOP;
  
    lockOrderInLoss();
-   if(!sellOrdersLocked) {
-      calibrateOrdersAndBuyOrSell(DOWN, stop, take);
+   if(!sellOrdersLocked && NVL_BOLLINGER == nvl) {
+      calibrateOrdersAndBuyOrSell(DOWN, stop, take);   
+      drawVerticalLine(TimeCurrent(), EnumToString(nvl) + "_BLG_DOWN" + IntegerToString(robots[countRobots]), clrYellow);
       waitCandlesBollinger = 0;
    }
 }
 
-void calibrateOrdersAndBuyBollinger(MainCandles& mainCandles){ 
+void calibrateOrdersAndBuyBollinger(MainCandles& mainCandles, NIVEL nvl){ 
    double percent = 0.7;
    double stop = calcPoints(Lower[ultimo], Middle[ultimo], true)* percent;
    double take = stop * PROPORTION_TAKE_STOP;
  
  
    lockOrderInLoss();
-   if(!buyOrdersLocked) {
+   if(!buyOrdersLocked && NVL_BOLLINGER == nvl) {
       calibrateOrdersAndBuyOrSell(UP, stop, take);
+      drawVerticalLine(TimeCurrent(), EnumToString(nvl) + "_BLG_UP" + IntegerToString(robots[countRobots]), clrGreen);
       waitCandlesBollinger = 0;
    }
 }
