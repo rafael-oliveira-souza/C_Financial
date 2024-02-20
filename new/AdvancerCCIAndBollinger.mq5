@@ -974,16 +974,16 @@ void executeExponentials() {
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    if(EXECUTE_EXPONENTIAL_VOLUME) {
       double minimunVolume = 0.01;
-      double goal = INITIAL_BALANCE * 5;
+      double goal =  round(balance / LAST_BALANCE_GOALS);
       double goalBalanceUp = LAST_BALANCE_GOALS + goal;
       double goalBalanceDown = LAST_BALANCE_GOALS - goal;
       
-      if(goalBalanceUp > 0  && balance > goalBalanceUp) {
+      if(goal > 1){
         ACTIVE_VOLUME =  NormalizeDouble(ACTIVE_VOLUME + minimunVolume, 2);
-        LAST_BALANCE_GOALS = goalBalanceUp;
-      }else if(goalBalanceDown > 0 && ACTIVE_VOLUME > minimunVolume && balance <= goalBalanceDown){
+        LAST_BALANCE_GOALS = balance;
+      }else if(goal < 1 && ACTIVE_VOLUME > VOLUME) {
         ACTIVE_VOLUME =  NormalizeDouble(ACTIVE_VOLUME - minimunVolume, 2);
-        LAST_BALANCE_GOALS = goalBalanceDown;
+        LAST_BALANCE_GOALS = balance;
       }
    }
    
