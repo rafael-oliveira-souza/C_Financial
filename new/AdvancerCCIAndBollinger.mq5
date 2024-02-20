@@ -431,7 +431,13 @@ bool validateSequence(MqlRates& candlesV[], int start, int end, bool isUp) {
 
 void lockOrderInLoss(){
    int sellOrdersInLoss = 0, buyOrdersInLoss = 0;
-   if(LOCK_ORDERS_BY_TYPE_IF_LOSS > 0){
+   double lockOrdersByTipeQtd = LOCK_ORDERS_BY_TYPE_IF_LOSS;
+   
+   if(EXECUTE_EXPONENTIAL_ROBOTS && NUMBER_MAX_ROBOTS < numberMaxRobotsActive){
+      lockOrdersByTipeQtd = NormalizeDouble(numberMaxRobotsActive * 0.3, 2);
+   }
+   
+   if(lockOrdersByTipeQtd > 0){
       long now = (long)TimeCurrent();
       for(int position = PositionsTotal(); position >= 0; position--)  {
          //ulong magicNumber = robots[position];
@@ -456,10 +462,10 @@ void lockOrderInLoss(){
          }
       }
       
-      if(buyOrdersInLoss >= LOCK_ORDERS_BY_TYPE_IF_LOSS) {
+      if(buyOrdersInLoss >= lockOrdersByTipeQtd) {
          buyOrdersLocked = true;
       }
-      if(sellOrdersInLoss >= LOCK_ORDERS_BY_TYPE_IF_LOSS) {
+      if(sellOrdersInLoss >= lockOrdersByTipeQtd) {
         sellOrdersLocked = true;
       }
    }
