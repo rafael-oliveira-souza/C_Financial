@@ -125,26 +125,29 @@ struct PeriodProtectionTime {
 
 
 input ENUM_TIMEFRAMES PERIOD = PERIOD_H1;
-input double VOLUME = 0.01;
+input double VOLUME = 0.1;
 input double LOSS_PER_DAY = 0;
 input double LOSS_PER_OPERATION = 0;
 input double PROFIT_PER_DAY = 0;
 input double PROPORTION_TAKE_STOP = 0.5;
 input string SCHEDULE_START_PROTECTION = "00:00";
 input string SCHEDULE_END_PROTECTION = "00:00";
-input int NUMBER_MAX_ROBOTS = 10;
+input int NUMBER_MAX_ROBOTS = 100;
+input int NUMBER_ROBOTS = 30;
 input int LOCK_ORDERS_BY_TYPE_IF_LOSS = 3;
 input int LOCK_ORDERS_BY_SECONDS = 0;
-input int ONLY_OPEN_NEW_ORDER_AFTER = 30;
-input double PROTECT_ORDERS_IN_GAIN_BY_POINTS = 300;
+input int ONLY_OPEN_NEW_ORDER_AFTER = 15;
+input double PROTECT_ORDERS_IN_GAIN_BY_POINTS = 150;
 input bool EXECUTE_CCI = true;
 input bool EXECUTE_BOLLINGER_BANDS = true;
+input bool EXECUTE_MARTINGALE = true;
 input bool CALIBRATE_ORDERS = true;
-input bool MOVE_STOP_AND_TAKE = true;
-input bool EXECUTE_EXPONENTIAL_ROBOTS = false;
+input bool EXECUTE_EXPONENTIAL_ROBOTS = true;
 input bool EXECUTE_EXPONENTIAL_VOLUME = true;
+input bool MOVE_STOP_AND_TAKE = false;
 input int MAX_CCI_VALUE = 100;
-input double INITIAL_BALANCE = 25;
+input double INITIAL_BALANCE = 250;
+input NIVEL NVL_MARTINGALE = NVL_4;
 input NIVEL NVL_BOLLINGER = NVL_4;
 input NIVEL NVL_CCI = NVL_4;
  int MAX_FORCE_VALUE = 0;
@@ -152,6 +155,7 @@ input NIVEL NVL_CCI = NVL_4;
  ulong MAGIC_NUMBER = 200296;
 int WAIT_TICKS = 0;
 int WAIT_CANDLES = 0;
+double EXPONENTIAL_MULTIPLICATOR_ROBOTS = 1, EXPONENTIAL_MULTIPLICATOR_VOLUME = 1;
 
 MqlRates candles[];
 datetime actualDay = 0;
@@ -164,7 +168,7 @@ double CCI[], IFORCE[], IBulls[], IBears[], valuePrice = 0;
 int handleICCI, handleIForce, handleAverage9, handleAverage21, handleAverage80, handleAverage200, handleAverage400, handleAverage600, handleBears, handleBulls, handleBollinger;
 ORIENTATION orientMacro = MEDIUM;
 double ACTIVE_BALANCE= 0, LAST_BALANCE_ROBOTS = 0, LAST_BALANCE_GOALS = 0, ACTIVE_VOLUME = 0;
-int numberMaxRobotsActive = 0, waitTicks = 0, waitCandlesBollinger = 0, waitCandles = 0, countAverage = 0; 
+int numberRobotsActive = 0, waitTicks = 0, waitCandlesBollinger = 0, waitCandles = 0, countAverage = 0; 
 bool waitNewDay = false, dailyProfitReached = false;
 int countRobots = 0, periodAval = 5;
 ulong robots[];
@@ -190,15 +194,15 @@ int OnInit() {
    LAST_BALANCE_ROBOTS = ACTIVE_BALANCE;
    LAST_BALANCE_GOALS = ACTIVE_BALANCE;
    ACTIVE_VOLUME = VOLUME;
-   numberMaxRobotsActive = NUMBER_MAX_ROBOTS;
+   numberRobotsActive = NUMBER_ROBOTS;
    startedDatetimeRobot = TimeCurrent();
-   initRobots(numberMaxRobotsActive);
+   initRobots(numberRobotsActive);
    return(INIT_SUCCEEDED);
 }
   
 void OnTick() {
    countRobots = PositionsTotal();
-   if(countRobots < numberMaxRobotsActive) {
+   if(countRobots < numberRobotsActive) {
       waitTicks--;
       if(isNewDay(startedDatetimeRobot)) {
          //INITIAL_BALANCE = AccountInfoDouble(ACCOUNT_BALANCE);
@@ -207,6 +211,8 @@ void OnTick() {
          waitNewDay = false;
          waitCandles = 0;
          waitTicks = 0;
+         //LAST_BALANCE_ROBOTS = AccountInfoDouble(ACCOUNT_BALANCE);
+         //LAST_BALANCE_GOALS = AccountInfoDouble(ACCOUNT_BALANCE);
       }
       
       if(countRobots > 0 && PROTECT_ORDERS_IN_GAIN_BY_POINTS > 0) {
@@ -220,7 +226,7 @@ void OnTick() {
             if(hasNewCandle()) {
                waitCandles--;
                waitCandlesBollinger--;
-              // showComments();
+               showComments();
             }
             if(waitCandles <= 0 && waitTicks <= 0) {
                moveStopAndTake(PROTECT_ORDERS_IN_GAIN_BY_POINTS);
@@ -235,12 +241,44 @@ void OnTick() {
                if(EXECUTE_BOLLINGER_BANDS){
                   executeBollingerBands(mainCandles);
                }
+               if(EXECUTE_MARTINGALE){
+                  executeMartingale(mainCandles);
+               }
             }
          }   
       }
    }
 }
 
+void executeMartingale(MainCandles& mainCandles){
+   if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval) {
+      double actualIdx = CCI[antipenultimo];
+      if(sellOrdersLocked == true){
+         calibrateOrdersAndBuyMartingale(mainCandles, NVL_1);
+         if((mainCandles.lastOrientation == DOWN &&  mainCandles.actualOrientation == UP)) {
+            calibrateOrdersAndBuyMartingale(mainCandles, NVL_2);
+            if((mainCandles.actual.close >= mainCandles.last.open )) {
+               calibrateOrdersAndBuyMartingale(mainCandles, NVL_3);
+               if(actualIdx <= -MAX_CCI_VALUE) {
+                  calibrateOrdersAndSellMartingale(mainCandles, NVL_4);
+               }
+            }
+         }
+      }
+      if(buyOrdersLocked == true){
+         calibrateOrdersAndSellMartingale(mainCandles, NVL_1);
+         if((mainCandles.lastOrientation == UP &&  mainCandles.actualOrientation == DOWN)) {
+            calibrateOrdersAndSellMartingale(mainCandles, NVL_2);
+            if((mainCandles.actual.close <= mainCandles.last.open )) {
+               calibrateOrdersAndSellMartingale(mainCandles, NVL_3);
+               if(actualIdx >= MAX_CCI_VALUE) {
+                  calibrateOrdersAndSellMartingale(mainCandles, NVL_4);
+               }
+            }
+         }
+      }
+   }
+}
 
 void executeCCI(MainCandles& mainCandles){
    if(CopyBuffer(handleICCI,0,0,periodAval,CCI) == periodAval) {
@@ -273,6 +311,27 @@ void executeCCI(MainCandles& mainCandles){
       }   
    }
 }
+
+void calibrateOrdersAndSellMartingale(MainCandles& mainCandles, NIVEL nvl){ 
+   lockOrderInLoss();
+   if(NVL_MARTINGALE == nvl) {
+      double max = mainCandles.last.high > mainCandles.actual.high ? mainCandles.last.high : mainCandles.actual.high;
+      double stop = calcPoints(max, mainCandles.actual.close, true);
+      calibrateOrdersAndBuyOrSell(DOWN, stop, stop);
+      drawHorizontalLine(mainCandles.actual.close, EnumToString(nvl) + "_MARTINGALE_DOWN" + IntegerToString(getActualRobot()), clrPink);
+   }
+}
+
+void calibrateOrdersAndBuyMartingale(MainCandles& mainCandles, NIVEL nvl){ 
+   lockOrderInLoss();
+   if(NVL_MARTINGALE == nvl) {
+      double max = mainCandles.last.low < mainCandles.actual.low ? mainCandles.last.low : mainCandles.actual.low;
+      double stop = calcPoints(max, mainCandles.actual.close, true);
+      calibrateOrdersAndBuyOrSell(UP, stop, stop);
+      drawHorizontalLine(mainCandles.actual.close, EnumToString(nvl) + "_MARTINGALE_UP" + IntegerToString(getActualRobot()), clrPink);
+   }
+}
+
 
 void calibrateOrdersAndSellCCI(MainCandles& mainCandles, NIVEL nvl){ 
    double max = mainCandles.last.high > mainCandles.secondLast.high ? mainCandles.last.high : mainCandles.secondLast.high;
@@ -429,14 +488,18 @@ bool validateSequence(MqlRates& candlesV[], int start, int end, bool isUp) {
    return isSequence;
 }
 
+double calcProportionalLockedOrders() {
+   if(EXECUTE_EXPONENTIAL_ROBOTS && NUMBER_ROBOTS < numberRobotsActive){
+      return round(NormalizeDouble(numberRobotsActive * 0.3, 2));
+   }
+
+   return LOCK_ORDERS_BY_TYPE_IF_LOSS;
+}
+
 void lockOrderInLoss(){
    int sellOrdersInLoss = 0, buyOrdersInLoss = 0;
-   double lockOrdersByTipeQtd = LOCK_ORDERS_BY_TYPE_IF_LOSS;
+   double lockOrdersByTipeQtd = calcProportionalLockedOrders();
    double sumBuys = 0, sumSells = 0;
-   
-   if(EXECUTE_EXPONENTIAL_ROBOTS && NUMBER_MAX_ROBOTS < numberMaxRobotsActive){
-      lockOrdersByTipeQtd = NormalizeDouble(numberMaxRobotsActive * 0.3, 2);
-   }
    
    if(lockOrdersByTipeQtd > 0){
       long now = (long)TimeCurrent();
@@ -542,8 +605,9 @@ ulong getActualRobot(){
 void showComments(){
    double profit = AccountInfoDouble(ACCOUNT_PROFIT);
    Comment(
-         " Total de robôs Disponiveis: ", (numberMaxRobotsActive - countRobots),
+         " Total de robôs Disponiveis: ", (numberRobotsActive - countRobots),
          " Total de robôs ativos: ", (countRobots), 
+         " Robos Travados: ", DoubleToString(calcProportionalLockedOrders(), 2),
          " Saldo: ", DoubleToString(ACTIVE_BALANCE + profit, 2),
          " Lucro Atual: ", DoubleToString(profit, 2),
          " Volume: ", ACTIVE_VOLUME);
@@ -593,7 +657,7 @@ void toSell(double volume, double stopLoss, double takeProfit){
 bool realizeDeals(TYPE_NEGOCIATION typeDeals, double volume, double stopLoss, double takeProfit, ulong magicNumber){
    if(typeDeals != NONE){
       BordersOperation borders = normalizeTakeProfitAndStopLoss(stopLoss, takeProfit); 
-      if(countRobots <= numberMaxRobotsActive && hasPositionOpenWithMagicNumber(countRobots, magicNumber) == false) {
+      if(countRobots <= numberRobotsActive && hasPositionOpenWithMagicNumber(countRobots, magicNumber) == false) {
          if(typeDeals == BUY){ 
             toBuy(volume, borders.min, borders.max);
          }
@@ -856,17 +920,20 @@ void protectOrderInGain(double points){
             double pointsToTake = calcPoints(newTake, currentPrice, true);
             double pointsToStop = calcPoints(newSl, currentPrice, true);
             
-            if( profit > 0 && (pointsGain >= points) && newSl <= entryPrice && newSl <= entryPrice){
-               if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ){
+            if( profit > 0 && (pointsGain >= points)){
+               if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY && newSl <= entryPrice){
                    newSl = entryPrice + (points * 0.2 * _Point);
+                  tradeLib.PositionModify(ticket, newSl, newTake);
+                  if(verifyResultTrade()){
+                     Print("Ordem Protegida");
+                  }
                }
-               else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL ){
+               else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL && newSl >= entryPrice){
                    newSl = entryPrice - (points * 0.2 * _Point);
-               }
-               
-               tradeLib.PositionModify(ticket, newSl, newTake);
-               if(verifyResultTrade()){
-                  Print("Ordem Protegida");
+                  tradeLib.PositionModify(ticket, newSl, newTake);
+                  if(verifyResultTrade()){
+                     Print("Ordem Protegida");
+                  }
                }
             }
          }
@@ -991,36 +1058,45 @@ bool inInterval(double& averages[], double value) {
 }
 
 void executeExponentials() {
+   double mult = 2;
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    if(EXECUTE_EXPONENTIAL_VOLUME) {
       double minimunVolume = 0.01;
-      double goal =  round(balance / LAST_BALANCE_GOALS);
-      double goalBalanceUp = LAST_BALANCE_GOALS + goal;
-      double goalBalanceDown = LAST_BALANCE_GOALS - goal;
+      double goal =  round(balance / INITIAL_BALANCE);
+      double goalBalanceUp = INITIAL_BALANCE + goal;
+      double goalBalanceDown = INITIAL_BALANCE - goal;
+      double normalizedVolume = NormalizeDouble(ACTIVE_VOLUME, 2);
+      double normalizedMinimunVolume = NormalizeDouble(minimunVolume, 2);
       
-      if(goal > 1){
-        ACTIVE_VOLUME =  NormalizeDouble(ACTIVE_VOLUME + minimunVolume, 2);
-        LAST_BALANCE_GOALS = balance;
-      }else if(goal < 1 && ACTIVE_VOLUME > VOLUME) {
-        ACTIVE_VOLUME =  NormalizeDouble(ACTIVE_VOLUME - minimunVolume, 2);
-        LAST_BALANCE_GOALS = balance;
+      if(goal > EXPONENTIAL_MULTIPLICATOR_VOLUME){
+        ACTIVE_VOLUME =  NormalizeDouble(normalizedVolume + normalizedMinimunVolume, 2);
+        EXPONENTIAL_MULTIPLICATOR_VOLUME = goal;
+        //LAST_BALANCE_GOALS = balance;
       }
+    /*  else if(goal < EXPONENTIAL_MULTIPLICATOR_VOLUME && ACTIVE_VOLUME > VOLUME) {
+        ACTIVE_VOLUME =  NormalizeDouble(normalizedVolume - normalizedMinimunVolume, 2);
+        EXPONENTIAL_MULTIPLICATOR_VOLUME  = (EXPONENTIAL_MULTIPLICATOR_VOLUME / mult) > 1 ?  (EXPONENTIAL_MULTIPLICATOR_VOLUME / mult) : 1;
+        //LAST_BALANCE_GOALS = balance;
+      }*/
    }
    
    if(EXECUTE_EXPONENTIAL_ROBOTS) {
-      double goal = INITIAL_BALANCE * 0.5;
-      double goalBalanceUp = LAST_BALANCE_ROBOTS + goal;
-      double goalBalanceDown = LAST_BALANCE_ROBOTS - goal;
+      double goal =  round(balance / INITIAL_BALANCE);
+      double goalBalanceUp = INITIAL_BALANCE + goal;
+      double goalBalanceDown = INITIAL_BALANCE - goal;
       
-      if(goalBalanceUp > 0 && balance > goalBalanceUp) {
-        numberMaxRobotsActive++;
-        initRobots(numberMaxRobotsActive);
-        LAST_BALANCE_ROBOTS = goalBalanceUp;
-      }else if(goalBalanceDown > 0 &&  numberMaxRobotsActive > 1 && balance <= goalBalanceDown){
-        numberMaxRobotsActive--;
-        initRobots(numberMaxRobotsActive);
-        LAST_BALANCE_ROBOTS = goalBalanceDown;
+      if(goal > EXPONENTIAL_MULTIPLICATOR_ROBOTS && numberRobotsActive < NUMBER_MAX_ROBOTS){
+        numberRobotsActive++;
+        initRobots(numberRobotsActive);
+        EXPONENTIAL_MULTIPLICATOR_ROBOTS =goal ;
+       // LAST_BALANCE_ROBOTS = goalBalanceUp;
       }
+      /* else if(goal < EXPONENTIAL_MULTIPLICATOR_ROBOTS && numberRobotsActive > NUMBER_ROBOTS ) {
+        numberRobotsActive--;
+        initRobots(numberRobotsActive);
+        EXPONENTIAL_MULTIPLICATOR_ROBOTS  = EXPONENTIAL_MULTIPLICATOR_ROBOTS / mult > 1 ?  EXPONENTIAL_MULTIPLICATOR_ROBOTS / mult : 1;
+       // LAST_BALANCE_ROBOTS = goalBalanceDown;
+      } */
    }
    
 }
@@ -1028,7 +1104,7 @@ void executeExponentials() {
 void initRobots(int numRobots) {
    ArrayResize(robots, numRobots);
    for(int i = 0; i < numRobots; i++)  {
-      robots[i] = MAGIC_NUMBER + i; 
+      robots[i] = MAGIC_NUMBER; 
    }
 }
 
