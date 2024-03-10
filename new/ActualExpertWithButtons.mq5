@@ -141,7 +141,8 @@ input double PROTECT_ORDERS_IN_GAIN_BY_POINTS = 300;
 input double MOVE_STOP_POINTS = 300;
 input bool EXECUTE_CCI = true;
 input bool EXECUTE_BOLLINGER_BANDS = true;
-input bool EXECUTE_SEQUENCE_CCI = true;
+ bool EXECUTE_SEQUENCE_CCI = false;
+input bool EXECUTE_MACD = true;
  bool EXECUTE_MARTINGALE = false;
 input bool CALIBRATE_ORDERS = true;
 input bool EXECUTE_EXPONENTIAL_ROBOTS = true;
@@ -173,9 +174,10 @@ bool negociationActive = false;
 MqlTick tick;                // variável para armazenar ticks 
 
 
-double Middle[], Upper[], Lower[];
+double Middle[], Upper[], Lower[], VWAP[], MACD[];
 double CCI[], IFORCE[], IBulls[], IBears[], valuePrice = 0;
-int handleICCI, handleIForce, handleAverage9, handleAverage21, handleAverage80, handleAverage200, handleAverage400, handleAverage600, handleBears, handleBulls, handleBollinger;
+int handleICCI, handleIForce, handleAverage9, handleAverage21, handleVwap, handleAverage80, handleAverage200, handleAverage400, handleAverage600;
+int handleBears, handleBulls, handleBollinger, handleMACD;
 ORIENTATION orientMacro = MEDIUM;
 double ACTIVE_BALANCE= 0, LAST_BALANCE_ROBOTS = 0, LAST_BALANCE_GOALS = 0, ACTIVE_VOLUME = 0;
 double PROFIT_TOTAL= 0, PROFIT_SELL_TOTAL = 0, PROFIT_BUY_TOTAL = 0;
@@ -187,129 +189,7 @@ datetime startedDatetimeRobot;
 bool sellOrdersLocked = true,  buyOrdersLocked = true;
 int ultimo = periodAval-1, penultimo = periodAval-2, antipenultimo = periodAval-3, primeiro = 0, segundo = 1, terceiro = 2;
 POWER lockBuy = OFF, lockSell = OFF;
-bool LOCK_ROBOTS = false, SHOW_BUTTONS = true;
-
-
-            
-void OnChartEvent(const int id,
-                  const long &lparam,
-                  const double &dparam,
-                  const string &sparam){
-//---
-   // Fechar negociacões
-   if(id == CHARTEVENT_OBJECT_CLICK){
-      if(sparam == "btnShowButtons2"){
-         SHOW_BUTTONS = !SHOW_BUTTONS;
-         generateButtons();
-      }
-      if(sparam == "btnCloseBuy"){
-         closeAllPositionsByType(POSITION_TYPE_BUY, 0);
-      }
-      if(sparam == "btnCloseSell"){
-         closeAllPositionsByType(POSITION_TYPE_SELL, 0);
-      }
-      
-      if(sparam == "btnCloseAll"){
-         closeAll();
-      }
-      
-      if(sparam == "btnMoveStop"){
-         int pos = PositionsTotal() - 1;
-         for(int i = pos; i >= 0; i--)  {
-            protectOrderInGain(AUTOMATIC_ROBOTS_STOP);
-         }
-      }
-      
-      if(sparam == "btnBuy"){
-         ulong magic = MAGIC_NUMBER + 6000;
-         for(int i = 0; i < NUMBER_ROBOTS; i++){
-            magic = magic + i;
-            realizeDeals(BUY, VOLUME, AUTOMATIC_ROBOTS_STOP, AUTOMATIC_ROBOTS_TAKE, MAGIC_NUMBER);
-         }
-      }
-      
-      if(sparam == "btnSell"){
-         ulong magic = MAGIC_NUMBER + 6000;
-         for(int i = 0; i < NUMBER_ROBOTS; i++){
-            magic = magic + i;
-            realizeDeals(SELL, VOLUME, AUTOMATIC_ROBOTS_STOP, AUTOMATIC_ROBOTS_TAKE, MAGIC_NUMBER);
-         }
-      }
-      
-      if(sparam == "btnCloseProfit"){
-         closePositionInProfit();
-      }
-      if(sparam == "btnLockBuy"){
-         if(lockBuy == ON){
-            lockBuy = OFF;
-         }else{
-            lockBuy = ON;
-         }
-         generateButtons();
-      }
-      if(sparam == "btnLockSell"){
-         if(lockSell == ON){
-            lockSell = OFF;
-         }else{
-            lockSell = ON;
-         }
-         generateButtons();
-      }
-      
-      if(sparam == "btnDoubleVol"){
-         ACTIVE_VOLUME *= 2;   
-      }
-      
-      if(sparam == "btnDivVol"){
-         ACTIVE_VOLUME /= 2; 
-         if(ACTIVE_VOLUME < VOLUME) {
-            ACTIVE_VOLUME = VOLUME; 
-         } 
-      }
-      
-      if(sparam == "btnResetVol"){
-         ACTIVE_VOLUME = VOLUME; 
-      }
-      
-      if(sparam == "btnLockRobots"){
-         LOCK_ROBOTS = !LOCK_ROBOTS; 
-         generateButtons();
-      }
-      
-      if(sparam == "btnUpTakeBuy"){
-         moveAllTakePerPoint(AUTOMATIC_ROBOTS_TAKE, POSITION_TYPE_BUY);
-      }
-      
-      if(sparam == "btnDownTakeBuy"){
-         moveAllTakePerPoint(-AUTOMATIC_ROBOTS_TAKE, POSITION_TYPE_BUY);
-      }
-      
-      if(sparam == "btnUpStopBuy"){
-         moveAllStopPerPoint(AUTOMATIC_ROBOTS_STOP, POSITION_TYPE_BUY);
-      }
-      
-      if(sparam == "btnDownStopBuy"){
-         moveAllStopPerPoint(-AUTOMATIC_ROBOTS_STOP, POSITION_TYPE_BUY);
-      }
-      
-      if(sparam == "btnUpTakeSell"){
-         moveAllTakePerPoint(AUTOMATIC_ROBOTS_TAKE, POSITION_TYPE_SELL);
-      }
-      
-      if(sparam == "btnDownTakeSell"){
-         moveAllTakePerPoint(-AUTOMATIC_ROBOTS_TAKE, POSITION_TYPE_SELL);
-      }
-      
-      if(sparam == "btnUpStopSell"){
-         moveAllStopPerPoint(AUTOMATIC_ROBOTS_STOP, POSITION_TYPE_SELL);
-      }
-      
-      if(sparam == "btnDownStopSell"){
-         moveAllStopPerPoint(-AUTOMATIC_ROBOTS_STOP, POSITION_TYPE_SELL);
-      }
-   }
-}
-
+bool LOCK_ROBOTS = false, SHOW_BUTTONS = false;
 
 //+------------------------------------------------------------------+
 //                                                                          | Expert initialization function                                   |
@@ -322,7 +202,8 @@ int OnInit() {
  //  handleAverage200 = iMA(_Symbol,PERIOD,200,0,MODE_SMMA,PRICE_CLOSE);
  //  handleAverage400 = iMA(_Symbol,PERIOD,400,0,MODE_SMMA,PRICE_CLOSE);
  //  handleAverage600 = iMA(_Symbol,PERIOD,600,0,MODE_SMMA,PRICE_CLOSE);
-   handleBollinger = iBands(_Symbol, PERIOD, 20, 0, 2, PRICE_CLOSE);
+   handleBollinger = iBands(_Symbol, PERIOD, 20, 0, 2,PRICE_CLOSE);
+   handleMACD = iMACD(_Symbol,PERIOD,12, 26, PERIOD,PRICE_CLOSE);
    //handleIForce = iForce(_Symbol,PERIOD,14, MODE_SMA, VOLUME_TICK);
    //handleBears = iBearsPower(_Symbol,PERIOD,14);
    //handleBulls = iBullsPower(_Symbol,PERIOD,14);
@@ -372,10 +253,46 @@ void OnTick() {
                  executeBollingerBands(mainCandles);
                }
                if(EXECUTE_SEQUENCE_CCI){
-                  executeStrategySequenceFlow(mainCandles);
+              //    executeStrategySequenceFlow(mainCandles);
+               }
+               if(EXECUTE_MACD){
+                  executeMACD(mainCandles);
                }
             }
          }   
+      }
+   }
+}
+
+void executeMACD(MainCandles& mainCandles){
+   if(CopyBuffer(handleMACD,0,0,periodAval,MACD) == periodAval) {
+      if(!sellOrdersLocked){
+         if(MACD[primeiro] > MACD[segundo] && MACD[segundo] > MACD[antipenultimo] &&  MACD[antipenultimo] > MACD[penultimo] &&  MACD[penultimo] > MACD[ultimo]){
+            if(MACD[primeiro] > 0 && MACD[segundo] > 0 && MACD[antipenultimo] < 0 && MACD[penultimo] < 0 && MACD[ultimo] < 0){
+               if(mainCandles.secondLastOrientation == UP && mainCandles.actualOrientation == DOWN && mainCandles.lastOrientation == DOWN) {
+                  double stop = calcPoints(mainCandles.secondLast.high, mainCandles.actual.close, true) ;
+                  double take =  stop * 2 * PROPORTION_TAKE_STOP;
+                  
+                  lockOrderInLoss();
+                  calibrateOrdersAndBuyOrSell(DOWN, stop, take);
+                  drawHorizontalLine(mainCandles.actual.close, "MACD_DOWN" + IntegerToString(getActualRobot()), clrAntiqueWhite);
+               }
+            }
+         }
+      }
+      if(!buyOrdersLocked){
+         if(MACD[primeiro] < MACD[segundo]  && MACD[segundo] < MACD[antipenultimo] &&  MACD[antipenultimo] < MACD[penultimo] &&  MACD[penultimo] < MACD[ultimo]){
+            if(MACD[primeiro] < 0 && MACD[segundo] < 0 && MACD[antipenultimo] > 0 && MACD[penultimo] > 0 && MACD[ultimo] > 0){
+               if(mainCandles.secondLastOrientation == DOWN && mainCandles.actualOrientation == UP && mainCandles.lastOrientation == UP) {
+                  double stop = calcPoints(mainCandles.secondLast.low, mainCandles.actual.close, true) ;
+                  double take =  stop * 2 * PROPORTION_TAKE_STOP;
+    
+                  lockOrderInLoss();
+                  calibrateOrdersAndBuyOrSell(UP, stop, take);
+                  drawHorizontalLine(mainCandles.actual.close, "MACD_UP" + IntegerToString(getActualRobot()), clrAntiqueWhite);
+               }
+            }
+         }
       }
    }
 }
@@ -1471,4 +1388,124 @@ void generateButtons(){
 
 color pressButtonColor(bool var, color primary = clrBlue, color secundary =  clrBlueViolet){
    return (var == true ? primary : secundary);
+}
+
+            
+void OnChartEvent(const int id,
+                  const long &lparam,
+                  const double &dparam,
+                  const string &sparam){
+//---
+   // Fechar negociacões
+   if(id == CHARTEVENT_OBJECT_CLICK){
+      if(sparam == "btnShowButtons2"){
+         SHOW_BUTTONS = !SHOW_BUTTONS;
+         generateButtons();
+      }
+      if(sparam == "btnCloseBuy"){
+         closeAllPositionsByType(POSITION_TYPE_BUY, 0);
+      }
+      if(sparam == "btnCloseSell"){
+         closeAllPositionsByType(POSITION_TYPE_SELL, 0);
+      }
+      
+      if(sparam == "btnCloseAll"){
+         closeAll();
+      }
+      
+      if(sparam == "btnMoveStop"){
+         int pos = PositionsTotal() - 1;
+         for(int i = pos; i >= 0; i--)  {
+            protectOrderInGain(AUTOMATIC_ROBOTS_STOP);
+         }
+      }
+      
+      if(sparam == "btnBuy"){
+         ulong magic = MAGIC_NUMBER + 6000;
+         for(int i = 0; i < NUMBER_ROBOTS; i++){
+            magic = magic + i;
+            realizeDeals(BUY, VOLUME, AUTOMATIC_ROBOTS_STOP, AUTOMATIC_ROBOTS_TAKE, MAGIC_NUMBER);
+         }
+      }
+      
+      if(sparam == "btnSell"){
+         ulong magic = MAGIC_NUMBER + 6000;
+         for(int i = 0; i < NUMBER_ROBOTS; i++){
+            magic = magic + i;
+            realizeDeals(SELL, VOLUME, AUTOMATIC_ROBOTS_STOP, AUTOMATIC_ROBOTS_TAKE, MAGIC_NUMBER);
+         }
+      }
+      
+      if(sparam == "btnCloseProfit"){
+         closePositionInProfit();
+      }
+      if(sparam == "btnLockBuy"){
+         if(lockBuy == ON){
+            lockBuy = OFF;
+         }else{
+            lockBuy = ON;
+         }
+         generateButtons();
+      }
+      if(sparam == "btnLockSell"){
+         if(lockSell == ON){
+            lockSell = OFF;
+         }else{
+            lockSell = ON;
+         }
+         generateButtons();
+      }
+      
+      if(sparam == "btnDoubleVol"){
+         ACTIVE_VOLUME *= 2;   
+      }
+      
+      if(sparam == "btnDivVol"){
+         ACTIVE_VOLUME /= 2; 
+         if(ACTIVE_VOLUME < VOLUME) {
+            ACTIVE_VOLUME = VOLUME; 
+         } 
+      }
+      
+      if(sparam == "btnResetVol"){
+         ACTIVE_VOLUME = VOLUME; 
+      }
+      
+      if(sparam == "btnLockRobots"){
+         LOCK_ROBOTS = !LOCK_ROBOTS; 
+         generateButtons();
+      }
+      
+      if(sparam == "btnUpTakeBuy"){
+         moveAllTakePerPoint(AUTOMATIC_ROBOTS_TAKE, POSITION_TYPE_BUY);
+      }
+      
+      if(sparam == "btnDownTakeBuy"){
+         moveAllTakePerPoint(-AUTOMATIC_ROBOTS_TAKE, POSITION_TYPE_BUY);
+      }
+      
+      if(sparam == "btnUpStopBuy"){
+         moveAllStopPerPoint(AUTOMATIC_ROBOTS_STOP, POSITION_TYPE_BUY);
+      }
+      
+      if(sparam == "btnDownStopBuy"){
+         moveAllStopPerPoint(-AUTOMATIC_ROBOTS_STOP, POSITION_TYPE_BUY);
+      }
+      
+      if(sparam == "btnUpTakeSell"){
+         moveAllTakePerPoint(AUTOMATIC_ROBOTS_TAKE, POSITION_TYPE_SELL);
+      }
+      
+      if(sparam == "btnDownTakeSell"){
+         moveAllTakePerPoint(-AUTOMATIC_ROBOTS_TAKE, POSITION_TYPE_SELL);
+      }
+      
+      if(sparam == "btnUpStopSell"){
+         moveAllStopPerPoint(AUTOMATIC_ROBOTS_STOP, POSITION_TYPE_SELL);
+      }
+      
+      if(sparam == "btnDownStopSell"){
+         moveAllStopPerPoint(-AUTOMATIC_ROBOTS_STOP, POSITION_TYPE_SELL);
+      }
+   }
 }
