@@ -268,7 +268,7 @@ void executeMACD(MainCandles& mainCandles){
    if(CopyBuffer(handleMACD,0,0,periodAval,MACD) == periodAval) {
       if(!sellOrdersLocked){
          if(MACD[primeiro] > MACD[segundo] && MACD[segundo] > MACD[antipenultimo] &&  MACD[antipenultimo] > MACD[penultimo] &&  MACD[penultimo] > MACD[ultimo]){
-            if(MACD[primeiro] > 0 && MACD[segundo] > 0 && MACD[antipenultimo] < 0 && MACD[penultimo] < 0 && MACD[ultimo] < 0){
+           // if(MACD[primeiro] > 0 && MACD[segundo] > 0 && MACD[antipenultimo] < 0 && MACD[penultimo] < 0 && MACD[ultimo] < 0){
                if(mainCandles.secondLastOrientation == UP && mainCandles.actualOrientation == DOWN && mainCandles.lastOrientation == DOWN) {
                   double stop = calcPoints(mainCandles.secondLast.high, mainCandles.actual.close, true) ;
                   double take =  stop * 2 * PROPORTION_TAKE_STOP;
@@ -277,12 +277,12 @@ void executeMACD(MainCandles& mainCandles){
                   calibrateOrdersAndBuyOrSell(DOWN, stop, take);
                   drawHorizontalLine(mainCandles.actual.close, "MACD_DOWN" + IntegerToString(getActualRobot()), clrAntiqueWhite);
                }
-            }
+           // }
          }
       }
       if(!buyOrdersLocked){
          if(MACD[primeiro] < MACD[segundo]  && MACD[segundo] < MACD[antipenultimo] &&  MACD[antipenultimo] < MACD[penultimo] &&  MACD[penultimo] < MACD[ultimo]){
-            if(MACD[primeiro] < 0 && MACD[segundo] < 0 && MACD[antipenultimo] > 0 && MACD[penultimo] > 0 && MACD[ultimo] > 0){
+            //if(MACD[primeiro] < 0 && MACD[segundo] < 0 && MACD[antipenultimo] > 0 && MACD[penultimo] > 0 && MACD[ultimo] > 0){
                if(mainCandles.secondLastOrientation == DOWN && mainCandles.actualOrientation == UP && mainCandles.lastOrientation == UP) {
                   double stop = calcPoints(mainCandles.secondLast.low, mainCandles.actual.close, true) ;
                   double take =  stop * 2 * PROPORTION_TAKE_STOP;
@@ -291,7 +291,7 @@ void executeMACD(MainCandles& mainCandles){
                   calibrateOrdersAndBuyOrSell(UP, stop, take);
                   drawHorizontalLine(mainCandles.actual.close, "MACD_UP" + IntegerToString(getActualRobot()), clrAntiqueWhite);
                }
-            }
+         //   }
          }
       }
    }
